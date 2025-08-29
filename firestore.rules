@@ -50,7 +50,7 @@ service cloud.firestore {
       }
     }
     
-    // 🔔 NOTIFICATIONS - New Instagram-like structure
+    // 🔔 NOTIFICATIONS - Updated rule for unified notification system
     match /notifications/{userId} {
       // Only the notification owner can read their notifications
       allow read: if request.auth != null && request.auth.uid == userId;
@@ -62,13 +62,16 @@ service cloud.firestore {
         // Owner can update/delete their notifications (mark as seen, delete)
         allow update, delete: if request.auth != null && request.auth.uid == userId;
         
-        // Anyone can create notifications for others (sender creates notification for receiver)
+        // Create rule - allow authenticated users to create notifications for others
         allow create: if request.auth != null 
           && request.resource.data.receiverId == userId
           && request.resource.data.senderId == request.auth.uid
           && request.resource.data.type in ['like', 'comment', 'follow_request', 'follow_accept']
           && request.resource.data.timestamp is timestamp
-          && request.resource.data.seen == false;
+          && request.resource.data.seen == false
+          && request.resource.data.aggregatedCount is number
+          && request.resource.data.lastActors is list
+          && request.resource.data.lastActors.size() > 0;
       }
     }
     

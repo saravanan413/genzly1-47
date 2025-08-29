@@ -24,11 +24,10 @@ export interface UnifiedNotification {
   receiverId: string;
   timestamp: any;
   seen: boolean;
+  aggregatedCount: number;
+  lastActors: string[];
   postId?: string;
   commentText?: string;
-  // For Instagram-like aggregation
-  aggregatedCount?: number;
-  lastActors?: string[];
   senderProfile?: {
     username: string;
     displayName: string;
@@ -96,7 +95,7 @@ export const createUnifiedNotification = async (
         const existingData = existingDoc.data();
         
         const currentActors = existingData.lastActors || [existingData.senderId];
-        const newActors = [senderId, ...currentActors.filter(id => id !== senderId)].slice(0, 3);
+        const newActors = [senderId, ...currentActors.filter((id: string) => id !== senderId)].slice(0, 3);
         
         await updateDoc(existingDoc.ref, {
           timestamp: serverTimestamp(),
@@ -134,31 +133,36 @@ export const createUnifiedNotification = async (
       console.log('No existing follow request notification found, creating new one');
     }
 
-    // Create notification data with all required fields per security rules
-    const notificationData = {
-      type,
-      senderId,
-      receiverId,
+    // Create notification data with EXACT fields required by Firestore rules
+    const notificationData: any = {
+      receiverId: receiverId,
+      senderId: senderId,
+      type: type,
       timestamp: serverTimestamp(),
       seen: false,
       aggregatedCount: 1,
-      lastActors: [senderId],
-      ...(additionalData?.postId && { postId: additionalData.postId }),
-      ...(additionalData?.commentText && { commentText: additionalData.commentText })
+      lastActors: [senderId]
     };
 
-    console.log('Creating notification document with data:', {
-      ...notificationData,
-      timestamp: '[ServerTimestamp]' // Don't log the actual timestamp object
-    });
-    
-    console.log('Validating required fields per Firestore rules:');
-    console.log('- receiverId:', !!notificationData.receiverId);
-    console.log('- senderId:', !!notificationData.senderId);
-    console.log('- type:', !!notificationData.type);
-    console.log('- timestamp:', !!notificationData.timestamp);
-    console.log('- seen:', notificationData.seen !== undefined);
-    console.log('- type is valid:', ['like', 'comment', 'follow_request', 'follow_accept'].includes(notificationData.type));
+    // Add optional fields only if they exist
+    if (additionalData?.postId) {
+      notificationData.postId = additionalData.postId;
+    }
+
+    if (additionalData?.commentText) {
+      notificationData.commentText = additionalData.commentText;
+    }
+
+    console.log('Creating notification document with data structure that matches Firestore rules:');
+    console.log('- receiverId:', notificationData.receiverId, '(matches userId in path)');
+    console.log('- senderId:', notificationData.senderId, '(matches current user)');
+    console.log('- type:', notificationData.type, '(valid type)');
+    console.log('- timestamp:', '[ServerTimestamp]', '(is timestamp)');
+    console.log('- seen:', notificationData.seen, '(is false)');
+    console.log('- aggregatedCount:', notificationData.aggregatedCount, '(is number)');
+    console.log('- lastActors:', notificationData.lastActors, '(is non-empty list)');
+    console.log('- postId (optional):', notificationData.postId || 'not set');
+    console.log('- commentText (optional):', notificationData.commentText || 'not set');
 
     // Attempt to create the notification
     console.log('Attempting to create notification document...');
@@ -174,16 +178,23 @@ export const createUnifiedNotification = async (
     console.error('Error details:');
     console.error('- Code:', error.code);
     console.error('- Message:', error.message);
-    console.error('- Stack:', error.stack);
     
-    // Log specific error types
+    // Log specific error types with detailed debugging
     if (error.code === 'permission-denied') {
-      console.error('PERMISSION DENIED - Check Firestore rules for notifications collection');
-      console.error('Required path: /notifications/{receiverId}/items');
+      console.error('PERMISSION DENIED - Firestore rule validation failed');
+      console.error('Required by rules:');
+      console.error('1. request.auth != null (user authenticated)');
+      console.error('2. request.resource.data.receiverId == userId (path matches)');
+      console.error('3. request.resource.data.senderId == request.auth.uid (sender is current user)');
+      console.error('4. request.resource.data.type in valid types');
+      console.error('5. request.resource.data.timestamp is timestamp');
+      console.error('6. request.resource.data.seen == false');
+      console.error('7. request.resource.data.aggregatedCount is number');
+      console.error('8. request.resource.data.lastActors is list with size > 0');
       console.error('Receiver ID:', receiverId);
       console.error('Sender ID:', senderId);
     } else if (error.code === 'invalid-argument') {
-      console.error('INVALID ARGUMENT - Check data structure matches Firestore rules');
+      console.error('INVALID ARGUMENT - Check data structure');
     } else if (error.code === 'not-found') {
       console.error('NOT FOUND - Collection or document path issue');
     }
@@ -333,7 +344,7 @@ export const removeUnifiedNotification = async (
       
       if (data.aggregatedCount > 1) {
         // Remove sender from aggregation
-        const newActors = (data.lastActors || []).filter(id => id !== senderId);
+        const newActors = (data.lastActors || []).filter((id: string) => id !== senderId);
         const newCount = (data.aggregatedCount || 1) - 1;
         
         await updateDoc(doc.ref, {

@@ -1,0 +1,73 @@
+
+import { Reel } from '../types/reels';
+
+export const reelsData: Reel[] = [
+  {
+    id: 1,
+    user: {
+      name: 'dance_queen_23',
+      avatar: 'https://via.placeholder.com/40/FF69B4/FFFFFF?Text=D',
+      isFollowing: false,
+    },
+    videoUrl: 'https://videos.pexels.com/video-files/4434242/4434242-hd_720_1366_25fps.mp4',
+    videoThumbnail: 'https://images.unsplash.com/photo-1574391884720-bbc4de1fdc2a?ixlib=rb-4.0.3&auto=format&fit=crop&w=500&q=60',
+    caption: 'New dance trend! 💃 #dance #trending #viral',
+    likes: 12500,
+    comments: 234,
+    shares: 89,
+    music: 'Original Audio - dance_queen_23',
+    isLiked: false,
+    isSaved: false,
+  },
+  {
+    id: 2,
+    user: {
+      name: 'cooking_master',
+      avatar: 'https://via.placeholder.com/40/32CD32/FFFFFF?Text=C',
+      isFollowing: true,
+    },
+    videoUrl: 'https://videos.pexels.com/video-files/4784403/4784403-hd_720_1366_25fps.mp4',
+    videoThumbnail: 'https://images.unsplash.com/photo-1556909114-f6e7ad7d3136?ixlib=rb-4.0.3&auto=format&fit=crop&w=500&q=60',
+    caption: '30-second pasta recipe! 🍝 #cooking #quickrecipes #food',
+    likes: 8900,
+    comments: 156,
+    shares: 67,
+    music: 'Cooking Vibes - Background Music',
+    isLiked: true,
+    isSaved: false,
+  },
+  {
+    id: 3,
+    user: {
+      name: 'travel_adventures',
+      avatar: 'https://via.placeholder.com/40/4169E1/FFFFFF?Text=T',
+      isFollowing: false,
+    },
+    videoUrl: 'https://videos.pexels.com/video-files/5490235/5490235-hd_720_1366_25fps.mp4',
+    videoThumbnail: 'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?ixlib=rb-4.0.3&auto=format&fit=crop&w=500&q=60',
+    caption: 'Hidden gem in Bali 🌴 #travel #bali #paradise #nature',
+    likes: 15600,
+    comments: 298,
+    shares: 145,
+    music: 'Tropical Vibes - Nature Sounds',
+    isLiked: false,
+    isSaved: true,
+  },
+  {
+    id: 4,
+    user: {
+      name: 'fitness_guru',
+      avatar: 'https://via.placeholder.com/40/FFA500/FFFFFF?Text=F',
+      isFollowing: true,
+    },
+    videoUrl: 'https://videos.pexels.com/video-files/8097330/8097330-hd_720_1366_25fps.mp4',
+    videoThumbnail: 'https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?ixlib=rb-4.0.3&auto=format&fit=crop&w=500&q=60',
+    caption: 'Morning workout routine 💪 #fitness #workout #motivation',
+    likes: 7800,
+    comments: 123,
+    shares: 45,
+    music: 'Workout Mix - High Energy',
+    isLiked: false,
+    isSaved: false,
+  },
+];

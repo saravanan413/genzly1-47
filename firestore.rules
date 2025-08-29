@@ -1,0 +1,172 @@
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Users can read all profiles, write their own
+    match /users/{userId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && request.auth.uid == userId;
+      allow create: if request.auth != null && request.auth.uid == userId;
+      allow update: if request.auth != null && request.auth.uid == userId;
+      
+      // Followers subcollection - allow users to follow/unfollow others
+      match /followers/{followerId} {
+        // Profile owner can read their followers
+        allow read: if request.auth != null && request.auth.uid == userId;
+        // Anyone authenticated can add themselves as a follower
+        allow create: if request.auth != null && request.auth.uid == followerId;
+        // Only the follower can remove themselves, or the profile owner can remove followers
+        allow delete: if request.auth != null && (request.auth.uid == followerId || request.auth.uid == userId);
+        // Allow updates for timestamp changes
+        allow update: if request.auth != null && (request.auth.uid == followerId || request.auth.uid == userId);
+      }
+      
+      // Following subcollection - allow users to manage who they follow
+      match /following/{followedId} {
+        // Only the profile owner can read/manage their following list
+        allow read: if request.auth != null && request.auth.uid == userId;
+        allow write: if request.auth != null && request.auth.uid == userId;
+        allow create: if request.auth != null && request.auth.uid == userId;
+        allow delete: if request.auth != null && request.auth.uid == userId;
+        allow update: if request.auth != null && request.auth.uid == userId;
+      }
+      
+      // Follow requests subcollection - FIXED: allow requesters to create, profile owner to manage
+      match /followRequests/{requesterId} {
+        // Profile owner can read their follow requests
+        allow read: if request.auth != null && request.auth.uid == userId;
+        // Requester can create their own request in target user's collection
+        allow create: if request.auth != null && request.auth.uid == requesterId;
+        // Profile owner can delete/update requests, requester can delete their own request
+        allow update, delete: if request.auth != null && (request.auth.uid == userId || request.auth.uid == requesterId);
+      }
+      
+      // Blocked users subcollection - users can manage their own blocked list
+      match /blockedUsers/{blockedUserId} {
+        allow read: if request.auth != null && request.auth.uid == userId;
+        allow write: if request.auth != null && request.auth.uid == userId;
+        allow create: if request.auth != null && request.auth.uid == userId;
+        allow delete: if request.auth != null && request.auth.uid == userId;
+      }
+    }
+    
+    // 🔔 NOTIFICATIONS - New Instagram-like structure
+    match /notifications/{userId} {
+      // Only the notification owner can read their notifications
+      allow read: if request.auth != null && request.auth.uid == userId;
+      
+      match /items/{notificationId} {
+        // Owner can read their notifications
+        allow read: if request.auth != null && request.auth.uid == userId;
+        
+        // Owner can update/delete their notifications (mark as seen, delete)
+        allow update, delete: if request.auth != null && request.auth.uid == userId;
+        
+        // Anyone can create notifications for others (sender creates notification for receiver)
+        allow create: if request.auth != null 
+          && request.resource.data.receiverId == userId
+          && request.resource.data.senderId == request.auth.uid
+          && request.resource.data.type in ['like', 'comment', 'follow_request', 'follow_accept']
+          && request.resource.data.timestamp is timestamp
+          && request.resource.data.seen == false;
+      }
+    }
+    
+    // PERSISTENT CHAT DOCUMENTS - Main chat collection for chat list persistence
+    match /chats/{chatId} {
+      // Only users in the 'users' array can read/write the chat document
+      allow read: if request.auth != null && 
+        request.auth.uid in resource.data.users;
+      
+      // Allow updates to chat document if user is in the users array
+      allow update: if request.auth != null && 
+        request.auth.uid in resource.data.users;
+      
+      // Allow creation of chat document if:
+      // 1. User is authenticated
+      // 2. User is in the users array of the document being created
+      // 3. Users array contains exactly 2 users (1-on-1 chat)
+      allow create: if request.auth != null && 
+        request.auth.uid in request.resource.data.users &&
+        request.resource.data.users.size() == 2 &&
+        request.resource.data.keys().hasAll(['users', 'lastMessage', 'createdAt', 'updatedAt']);
+      
+      // Chat messages subcollection
+      match /messages/{messageId} {
+        // Only chat participants can read messages
+        allow read: if request.auth != null && 
+          request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.users;
+        
+        // Only chat participants can create messages, and only if they are the sender
+        allow create: if request.auth != null && 
+          request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.users &&
+          request.auth.uid == request.resource.data.senderId;
+        
+        // Allow updates for marking messages as seen
+        allow update: if request.auth != null && 
+          request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.users;
+      }
+      
+      // Chat typing indicators
+      match /typing/{userId} {
+        allow read: if request.auth != null && 
+          request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.users;
+        allow write: if request.auth != null && 
+          request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.users &&
+          request.auth.uid == userId;
+      }
+    }
+    
+    // Posts - users can read all, write their own
+    match /posts/{postId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && 
+        request.auth.uid == resource.data.userId;
+      allow create: if request.auth != null && 
+        request.auth.uid == request.resource.data.userId;
+      allow update: if request.auth != null && 
+        request.auth.uid == resource.data.userId;
+      allow delete: if request.auth != null && 
+        request.auth.uid == resource.data.userId;
+    }
+    
+    // Stories - users can read active stories, write their own
+    match /stories/{storyId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && 
+        request.auth.uid == resource.data.userId;
+      allow create: if request.auth != null && 
+        request.auth.uid == request.resource.data.userId;
+      allow update: if request.auth != null && 
+        request.auth.uid == resource.data.userId;
+      allow delete: if request.auth != null && 
+        request.auth.uid == resource.data.userId;
+    }
+    
+    // Reels - users can read all, write their own
+    match /reels/{reelId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && 
+        request.auth.uid == resource.data.userId;
+      allow create: if request.auth != null && 
+        request.auth.uid == request.resource.data.userId;
+      allow update: if request.auth != null && 
+        request.auth.uid == resource.data.userId;
+      allow delete: if request.auth != null && 
+        request.auth.uid == resource.data.userId;
+    }
+
+    // Reports - only authenticated users can create reports, only admins can read
+    match /reports/{reportId} {
+      allow create: if request.auth != null && 
+        request.auth.uid == request.resource.data.reportedById;
+      allow read, update, delete: if false; // Only admins should access reports
+    }
+
+    // Notes rules - user can only write to their own note
+    match /users/{userId}/notes/{noteId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && request.auth.uid == userId && userId == noteId;
+    }
+  }
+}

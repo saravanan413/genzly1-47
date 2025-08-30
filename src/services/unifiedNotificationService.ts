@@ -69,10 +69,9 @@ export const createUnifiedNotification = async (
     console.log('Fetching sender profile for:', senderId);
     const senderProfile = await getUserProfile(senderId);
     if (!senderProfile) {
-      console.error('Could not find sender profile for:', senderId);
-      throw new Error('Sender profile not found');
+      console.warn('Could not find sender profile for:', senderId);
     }
-    console.log('Sender profile found:', senderProfile.username);
+    console.log('Sender profile found:', senderProfile?.username);
 
     // Reference to the correct path: /notifications/{receiverId}/items
     const notificationsRef = collection(db, 'notifications', receiverId, 'items');

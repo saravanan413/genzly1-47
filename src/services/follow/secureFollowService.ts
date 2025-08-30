@@ -1,3 +1,4 @@
+
 import { 
   doc, 
   writeBatch,
@@ -8,6 +9,7 @@ import {
 import { db } from '../../config/firebase';
 import { SecurityService } from '../securityService';
 import { logger } from '../../utils/logger';
+import { createFollowRequestNotification } from '../unifiedNotificationService';
 
 export class SecureFollowService {
   // Secure follow operation with full validation
@@ -129,6 +131,15 @@ export class SecureFollowService {
         timestamp: serverTimestamp(),
         status: 'pending'
       });
+      
+      // Create unified notification for the follow request
+      try {
+        await createFollowRequestNotification(targetUserId, requesterId);
+        logger.debug('Follow request notification created', { requesterId, targetUserId });
+      } catch (notificationError) {
+        logger.error('Failed to create follow request notification', notificationError);
+        // Don't fail the entire request if notification creation fails
+      }
       
       logger.debug('Follow request sent', { requesterId, targetUserId });
       return { success: true };

@@ -65,7 +65,7 @@ export const createUnifiedNotification = async (
       throw new Error('Missing required parameters');
     }
 
-    // Get sender profile for notification display
+    // Get sender profile for notification display (read-only)
     console.log('Fetching sender profile for:', senderId);
     const senderProfile = await getUserProfile(senderId);
     if (!senderProfile) {
@@ -77,30 +77,11 @@ export const createUnifiedNotification = async (
     const notificationsRef = collection(db, 'notifications', receiverId, 'items');
     console.log('Notifications collection path:', `notifications/${receiverId}/items`);
 
-    // IMPORTANT: Your Firestore rule allows only the receiver (owner) to update.
-    // Therefore, DO NOT perform sender-side updates for aggregation or timestamp refresh.
-    // We will:
-    // - Not aggregate likes client-side (no updates to existing docs).
-    // - For follow_request duplicates, just return the existing doc without updating.
-
-    // For follow requests, check for duplicates but DO NOT update existing (rule disallows sender updates)
-    if (type === 'follow_request') {
-      console.log('Checking for existing follow request notifications...');
-      const existingQuery = query(
-        notificationsRef,
-        where('senderId', '==', senderId),
-        where('type', '==', 'follow_request'),
-        limit(1)
-      );
-      
-      const existingDocs = await getDocs(existingQuery);
-      if (!existingDocs.empty) {
-        console.log('Follow request notification already exists; returning existing without update');
-        const existingDoc = existingDocs.docs[0];
-        return existingDoc.id;
-      }
-      console.log('No existing follow request notification found, creating new one');
-    }
+    // IMPORTANT:
+    // - Do not aggregate client-side or try to update existing docs (sender cannot update per rules).
+    // - Always create a new document for each action, including follow_request.
+    // - This directly satisfies your Firestore rule:
+    //   keys().hasOnly([... allowed keys ...]), timestamp == request.time, seen == false, etc.
 
     // Create notification data with EXACT fields allowed by Firestore rules
     // Allowed keys: receiverId, senderId, type, timestamp, seen, aggregatedCount, lastActors, postId, commentId, reelId
@@ -110,8 +91,8 @@ export const createUnifiedNotification = async (
       type: type,
       timestamp: serverTimestamp(), // Must equal request.time in rules
       seen: false,
-      aggregatedCount: 1,
-      lastActors: [senderId]
+      aggregatedCount: 1, // >= 1
+      lastActors: [senderId] // non-empty list
     };
 
     // Add optional fields only if they exist and are allowed by the rule
@@ -147,25 +128,21 @@ export const createUnifiedNotification = async (
     console.error('- Code:', error.code);
     console.error('- Message:', error.message);
     
-    // Log specific error types with detailed debugging
     if (error.code === 'permission-denied') {
       console.error('PERMISSION DENIED - Firestore rule validation failed');
       console.error('Required by rules:');
       console.error('1. request.auth != null (user authenticated)');
       console.error('2. request.resource.data.receiverId == userId (path matches)');
       console.error('3. request.resource.data.senderId == request.auth.uid (sender is current user)');
-      console.error('4. request.resource.data.type in valid types');
-      console.error('5. request.resource.data.timestamp == request.time (server timestamp)');
-      console.error('6. request.resource.data.seen == false');
-      console.error('7. request.resource.data.aggregatedCount is number >= 1');
-      console.error('8. request.resource.data.lastActors is list with size > 0');
-      console.error('9. keys().hasOnly allowed fields (no commentText, etc.)');
+      console.error('4. request.resource.data.senderId != userId (no self notify)');
+      console.error('5. request.resource.data.type in valid types');
+      console.error('6. request.resource.data.timestamp == request.time (server timestamp)');
+      console.error('7. request.resource.data.seen == false');
+      console.error('8. request.resource.data.aggregatedCount is number >= 1');
+      console.error('9. request.resource.data.lastActors is list with size > 0');
+      console.error('10. keys().hasOnly allowed fields (no commentText, etc.)');
       console.error('Receiver ID:', receiverId);
       console.error('Sender ID:', senderId);
-    } else if (error.code === 'invalid-argument') {
-      console.error('INVALID ARGUMENT - Check data structure');
-    } else if (error.code === 'not-found') {
-      console.error('NOT FOUND - Collection or document path issue');
     }
     
     throw error;

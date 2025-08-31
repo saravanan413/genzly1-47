@@ -244,18 +244,19 @@ export const subscribeToUnifiedNotifications = (
   });
 };
 
-// Mark notification as seen
+// Mark notification as seen - MUST include timestamp to satisfy rule
 export const markUnifiedNotificationAsSeen = async (userId: string, notificationId: string) => {
   try {
     await updateDoc(doc(db, 'notifications', userId, 'items', notificationId), {
-      seen: true
+      seen: true,
+      timestamp: serverTimestamp(), // required by rules: request.resource.data.timestamp == request.time
     });
   } catch (error) {
     console.error('Error marking unified notification as seen:', error);
   }
 };
 
-// Mark all notifications as seen
+// Mark all notifications as seen - MUST include timestamp to satisfy rule
 export const markAllUnifiedNotificationsAsSeen = async (userId: string) => {
   try {
     const q = query(
@@ -266,8 +267,11 @@ export const markAllUnifiedNotificationsAsSeen = async (userId: string) => {
     const snapshot = await getDocs(q);
     const batch = writeBatch(db);
     
-    snapshot.docs.forEach(doc => {
-      batch.update(doc.ref, { seen: true });
+    snapshot.docs.forEach(docSnap => {
+      batch.update(docSnap.ref, { 
+        seen: true,
+        timestamp: serverTimestamp(), // required by rules
+      });
     });
     
     await batch.commit();

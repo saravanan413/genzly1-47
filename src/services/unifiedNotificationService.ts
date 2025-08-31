@@ -14,7 +14,7 @@ import {
   writeBatch,
   limit
 } from 'firebase/firestore';
-import { db } from '../config/firebase';
+import { db, auth } from '../config/firebase';
 import { getUserProfile } from './firestoreService';
 
 export interface UnifiedNotification {
@@ -43,7 +43,7 @@ export const createUnifiedNotification = async (
   type: 'like' | 'comment' | 'follow_request' | 'follow_accept',
   additionalData?: {
     postId?: string;
-    commentText?: string;
+    commentText?: string; // NOTE: Will NOT be written due to Firestore rule keys().hasOnly
   }
 ) => {
   try {
@@ -77,39 +77,13 @@ export const createUnifiedNotification = async (
     const notificationsRef = collection(db, 'notifications', receiverId, 'items');
     console.log('Notifications collection path:', `notifications/${receiverId}/items`);
 
-    // For likes, check for existing notification on same post for aggregation
-    if (type === 'like' && additionalData?.postId) {
-      const existingQuery = query(
-        notificationsRef,
-        where('type', '==', 'like'),
-        where('postId', '==', additionalData.postId),
-        limit(1)
-      );
-      
-      const existingDocs = await getDocs(existingQuery);
-      
-      if (!existingDocs.empty) {
-        // Update existing notification with aggregation
-        const existingDoc = existingDocs.docs[0];
-        const existingData = existingDoc.data();
-        
-        const currentActors = existingData.lastActors || [existingData.senderId];
-        const newActors = [senderId, ...currentActors.filter((id: string) => id !== senderId)].slice(0, 3);
-        
-        await updateDoc(existingDoc.ref, {
-          timestamp: serverTimestamp(),
-          seen: false,
-          aggregatedCount: (existingData.aggregatedCount || 1) + 1,
-          lastActors: newActors,
-          senderId: senderId // Most recent actor becomes primary sender
-        });
-        
-        console.log('Updated aggregated like notification');
-        return existingDoc.id;
-      }
-    }
+    // IMPORTANT: Your Firestore rule allows only the receiver (owner) to update.
+    // Therefore, DO NOT perform sender-side updates for aggregation or timestamp refresh.
+    // We will:
+    // - Not aggregate likes client-side (no updates to existing docs).
+    // - For follow_request duplicates, just return the existing doc without updating.
 
-    // For follow requests, check for duplicates
+    // For follow requests, check for duplicates but DO NOT update existing (rule disallows sender updates)
     if (type === 'follow_request') {
       console.log('Checking for existing follow request notifications...');
       const existingQuery = query(
@@ -121,47 +95,42 @@ export const createUnifiedNotification = async (
       
       const existingDocs = await getDocs(existingQuery);
       if (!existingDocs.empty) {
-        console.log('Follow request notification already exists, updating timestamp');
+        console.log('Follow request notification already exists; returning existing without update');
         const existingDoc = existingDocs.docs[0];
-        await updateDoc(existingDoc.ref, {
-          timestamp: serverTimestamp(),
-          seen: false
-        });
         return existingDoc.id;
       }
       console.log('No existing follow request notification found, creating new one');
     }
 
-    // Create notification data with EXACT fields required by Firestore rules
+    // Create notification data with EXACT fields allowed by Firestore rules
+    // Allowed keys: receiverId, senderId, type, timestamp, seen, aggregatedCount, lastActors, postId, commentId, reelId
     const notificationData: any = {
       receiverId: receiverId,
       senderId: senderId,
       type: type,
-      timestamp: serverTimestamp(),
+      timestamp: serverTimestamp(), // Must equal request.time in rules
       seen: false,
       aggregatedCount: 1,
       lastActors: [senderId]
     };
 
-    // Add optional fields only if they exist
+    // Add optional fields only if they exist and are allowed by the rule
     if (additionalData?.postId) {
       notificationData.postId = additionalData.postId;
     }
-
-    if (additionalData?.commentText) {
-      notificationData.commentText = additionalData.commentText;
-    }
+    // DO NOT WRITE commentText (not allowed by keys().hasOnly)
+    // If you have a comment id, pass it here in the future:
+    // if (additionalData?.commentId) { notificationData.commentId = additionalData.commentId; }
 
     console.log('Creating notification document with data structure that matches Firestore rules:');
     console.log('- receiverId:', notificationData.receiverId, '(matches userId in path)');
     console.log('- senderId:', notificationData.senderId, '(matches current user)');
     console.log('- type:', notificationData.type, '(valid type)');
-    console.log('- timestamp:', '[ServerTimestamp]', '(is timestamp)');
-    console.log('- seen:', notificationData.seen, '(is false)');
-    console.log('- aggregatedCount:', notificationData.aggregatedCount, '(is number)');
-    console.log('- lastActors:', notificationData.lastActors, '(is non-empty list)');
+    console.log('- timestamp:', '[ServerTimestamp]', '(must equal request.time)');
+    console.log('- seen:', notificationData.seen, '(false on create)');
+    console.log('- aggregatedCount:', notificationData.aggregatedCount, '(number >= 1)');
+    console.log('- lastActors:', notificationData.lastActors, '(non-empty list)');
     console.log('- postId (optional):', notificationData.postId || 'not set');
-    console.log('- commentText (optional):', notificationData.commentText || 'not set');
 
     // Attempt to create the notification
     console.log('Attempting to create notification document...');
@@ -186,10 +155,11 @@ export const createUnifiedNotification = async (
       console.error('2. request.resource.data.receiverId == userId (path matches)');
       console.error('3. request.resource.data.senderId == request.auth.uid (sender is current user)');
       console.error('4. request.resource.data.type in valid types');
-      console.error('5. request.resource.data.timestamp is timestamp');
+      console.error('5. request.resource.data.timestamp == request.time (server timestamp)');
       console.error('6. request.resource.data.seen == false');
-      console.error('7. request.resource.data.aggregatedCount is number');
+      console.error('7. request.resource.data.aggregatedCount is number >= 1');
       console.error('8. request.resource.data.lastActors is list with size > 0');
+      console.error('9. keys().hasOnly allowed fields (no commentText, etc.)');
       console.error('Receiver ID:', receiverId);
       console.error('Sender ID:', senderId);
     } else if (error.code === 'invalid-argument') {
@@ -259,7 +229,7 @@ export const subscribeToUnifiedNotifications = (
         timestamp: notificationData.timestamp,
         seen: notificationData.seen || false,
         postId: notificationData.postId,
-        commentText: notificationData.commentText,
+        commentText: notificationData.commentText, // may be undefined; UI handles fallback
         aggregatedCount: notificationData.aggregatedCount || 1,
         lastActors: notificationData.lastActors || [notificationData.senderId],
         senderProfile,
@@ -325,7 +295,16 @@ export const removeUnifiedNotification = async (
 ) => {
   try {
     console.log('Removing unified notification:', { receiverId, senderId, type, postId });
+
+    // Your rules only allow the OWNER (receiverId) to update/delete notifications.
+    // If current user is not the owner, skip any write to avoid permission errors.
+    const currentUid = auth.currentUser?.uid;
+    if (currentUid !== receiverId) {
+      console.log('Skipping notification removal: only the notification owner can modify/delete per rules');
+      return;
+    }
     
+    // Since we no longer aggregate likes client-side, simply delete matching docs when owner triggers the action.
     const q = query(
       collection(db, 'notifications', receiverId, 'items'),
       where('type', '==', type),
@@ -334,36 +313,11 @@ export const removeUnifiedNotification = async (
     );
     
     const snapshot = await getDocs(q);
-    console.log('Found notifications to remove/update:', snapshot.docs.length);
+    console.log('Found notifications to remove:', snapshot.docs.length);
     
-    if (type === 'like' && snapshot.docs.length > 0) {
-      // For likes, handle aggregation
-      const doc = snapshot.docs[0];
-      const data = doc.data();
-      
-      if (data.aggregatedCount > 1) {
-        // Remove sender from aggregation
-        const newActors = (data.lastActors || []).filter((id: string) => id !== senderId);
-        const newCount = (data.aggregatedCount || 1) - 1;
-        
-        await updateDoc(doc.ref, {
-          aggregatedCount: newCount,
-          lastActors: newActors,
-          senderId: newActors[0] || data.senderId,
-          timestamp: serverTimestamp()
-        });
-        console.log('Updated aggregated like notification');
-      } else {
-        // Delete if it was the only like
-        await deleteDoc(doc.ref);
-        console.log('Deleted last like notification');
-      }
-    } else {
-      // For other types, delete all matching notifications
-      const deletePromises = snapshot.docs.map(doc => deleteDoc(doc.ref));
-      await Promise.all(deletePromises);
-      console.log(`Deleted ${snapshot.docs.length} ${type} notifications`);
-    }
+    const deletePromises = snapshot.docs.map(docSnap => deleteDoc(docSnap.ref));
+    await Promise.all(deletePromises);
+    console.log(`Deleted ${snapshot.docs.length} ${type} notifications`);
   } catch (error) {
     console.error('Error removing unified notification:', error);
   }
@@ -375,6 +329,7 @@ export const createLikeNotification = async (
   likerId: string,
   postId: string
 ) => {
+  // No client-side aggregation updates (rule forbids sender updates)
   return await createUnifiedNotification(postOwnerId, likerId, 'like', { postId });
 };
 
@@ -384,9 +339,10 @@ export const createCommentNotification = async (
   postId: string,
   commentText?: string
 ) => {
+  // commentText intentionally NOT written due to keys().hasOnly in rules
   return await createUnifiedNotification(postOwnerId, commenterId, 'comment', { 
     postId, 
-    commentText: commentText?.substring(0, 100) 
+    // commentText is ignored in createUnifiedNotification to satisfy rules
   });
 };
 

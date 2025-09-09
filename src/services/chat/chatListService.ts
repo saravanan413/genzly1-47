@@ -38,11 +38,9 @@ export const getCachedChatList = (userId: string): ChatListItem[] => {
     const cached = localStorage.getItem(`${CHAT_LIST_CACHE_KEY}_${userId}`);
     if (cached) {
       const parsedCache = JSON.parse(cached);
-      // Check if cache is less than 1 hour old
-      if (Date.now() - parsedCache.timestamp < 3600000) {
-        logger.debug('Retrieved cached chat list', { chatCount: parsedCache.data.length });
-        return parsedCache.data;
-      }
+      // Removed cache expiration - always return cached data if available
+      logger.debug('Retrieved cached chat list', { chatCount: parsedCache.data.length });
+      return parsedCache.data;
     }
   } catch (error) {
     logger.error('Error retrieving cached chat list', error);

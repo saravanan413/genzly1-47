@@ -5,16 +5,25 @@ import { storage, db } from '../config/firebase';
 
 export const uploadChatMedia = async (file: File, chatId: string, messageId: string): Promise<string> => {
   try {
+    console.log('📤 Uploading chat media:', { chatId, messageId, fileSize: file.size, fileType: file.type });
+    
     const fileExtension = file.name.split('.').pop();
     const fileName = `${messageId}.${fileExtension}`;
     const storageRef = ref(storage, `chats/${chatId}/media/${fileName}`);
     
+    console.log('🔗 Storage path:', `chats/${chatId}/media/${fileName}`);
+    
     const snapshot = await uploadBytes(storageRef, file);
     const downloadURL = await getDownloadURL(snapshot.ref);
     
+    console.log('✅ Chat media upload successful:', downloadURL);
     return downloadURL;
   } catch (error) {
-    console.error('Error uploading chat media:', error);
+    console.error('❌ Error uploading chat media:', error);
+    // Add specific error details for debugging
+    if (error.code === 'storage/unauthorized') {
+      console.error('🔒 Storage unauthorized - check Firebase Storage rules for path:', `chats/${chatId}/media/`);
+    }
     throw error;
   }
 };
@@ -61,16 +70,24 @@ export const createPost = async (
 
 export const uploadProfilePicture = async (file: File, userId: string): Promise<string> => {
   try {
+    console.log('📤 Uploading profile picture:', { userId, fileSize: file.size, fileType: file.type });
+    
     const fileExtension = file.name.split('.').pop();
     const fileName = `profile.${fileExtension}`;
     const storageRef = ref(storage, `users/${userId}/${fileName}`);
     
+    console.log('🔗 Storage path:', `users/${userId}/${fileName}`);
+    
     const snapshot = await uploadBytes(storageRef, file);
     const downloadURL = await getDownloadURL(snapshot.ref);
     
+    console.log('✅ Profile picture upload successful:', downloadURL);
     return downloadURL;
   } catch (error) {
-    console.error('Error uploading profile picture:', error);
+    console.error('❌ Error uploading profile picture:', error);
+    if (error.code === 'storage/unauthorized') {
+      console.error('🔒 Storage unauthorized - check Firebase Storage rules for path:', `users/${userId}/`);
+    }
     throw error;
   }
 };

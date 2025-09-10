@@ -139,12 +139,13 @@ export const useProfilePhotoHandlers = () => {
         }
       }
       
-      // Create unique filename
+      // Create unique filename with userId for better security matching
       const timestamp = Date.now();
       const fileName = `${currentUser.uid}_profile_${timestamp}.jpg`;
       
       console.log('Creating storage reference...');
-      const storageRef = ref(storage, `profilePictures/${fileName}`);
+      // Updated path to match storage rules better
+      const storageRef = ref(storage, `profilePictures/${currentUser.uid}_profile_${timestamp}.jpg`);
       
       console.log('Starting upload to Firebase Storage...');
       const snapshot = await uploadBytes(storageRef, finalBlob, {

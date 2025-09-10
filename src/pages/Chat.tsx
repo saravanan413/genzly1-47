@@ -8,7 +8,8 @@ import { useAuth } from '../contexts/AuthContext';
 import { 
   subscribeToUserChatList, 
   ChatListItem, 
-  clearCachedChatList 
+  clearCachedChatList,
+  hydrateUserChatList 
 } from '../services/chat/chatListService';
 import { logger } from '../utils/logger';
 
@@ -74,11 +75,11 @@ const Chat = () => {
     }
   }, [currentUser?.uid, authLoading]);
 
-  // Clean up cache on logout
+  // Clean up cache on logout - but don't clear on login
   useEffect(() => {
     if (!currentUser && !authLoading) {
-      logger.debug('User logged out, clearing chat cache');
-      clearCachedChatList();
+      logger.debug('User logged out, preserving chat cache for next login');
+      // Don't clear cache on logout - keep it for next login
     }
   }, [currentUser, authLoading]);
 

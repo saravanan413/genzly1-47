@@ -5,6 +5,7 @@ import {
   onSnapshot,
   doc,
   getDoc,
+  getDocs,
   where,
   limit
 } from 'firebase/firestore';
@@ -80,11 +81,133 @@ export const clearCachedChatList = (userId?: string): void => {
   }
 };
 
+// Helper function to get the latest message from messages subcollection
+const getLatestMessage = async (chatId: string) => {
+  try {
+    const messagesRef = collection(db, 'chats', chatId, 'messages');
+    const q = query(messagesRef, orderBy('timestamp', 'desc'), limit(1));
+    const snapshot = await getDocs(q);
+    
+    if (!snapshot.empty) {
+      const messageDoc = snapshot.docs[0];
+      const messageData = messageDoc.data();
+      return {
+        text: messageData.text || '',
+        timestamp: messageData.timestamp,
+        senderId: messageData.senderId || '',
+        seen: messageData.seen || false
+      };
+    }
+    return null;
+  } catch (error) {
+    logger.warn('Failed to fetch latest message for chat', { chatId, error });
+    return null;
+  }
+};
+
+export const hydrateUserChatList = async (currentUserId: string): Promise<ChatListItem[]> => {
+  logger.debug('Hydrating chat list from Firestore for all user chats', { userId: currentUserId });
+  
+  if (!currentUserId) {
+    return [];
+  }
+
+  try {
+    const chatsRef = collection(db, 'chats');
+    const q = query(
+      chatsRef,
+      where('users', 'array-contains', currentUserId)
+    );
+
+    const snapshot = await getDocs(q);
+    logger.debug('Found total chats for user', { chatCount: snapshot.size, userId: currentUserId });
+
+    const chatPromises = snapshot.docs.map(async (docSnapshot) => {
+      const chatData = docSnapshot.data();
+      const chatId = docSnapshot.id;
+      
+      if (!chatData.users || !Array.isArray(chatData.users) || !chatData.users.includes(currentUserId)) {
+        return null;
+      }
+      
+      const otherUserId = chatData.users.find((id: string) => id !== currentUserId);
+      if (!otherUserId) {
+        return null;
+      }
+      
+      // If lastMessage is missing or empty, try to fetch from messages subcollection
+      let lastMessage = chatData.lastMessage;
+      if (!lastMessage?.text || lastMessage.text.trim() === '') {
+        lastMessage = await getLatestMessage(chatId);
+        if (!lastMessage?.text) {
+          logger.debug('Skipping chat with no messages', { chatId });
+          return null;
+        }
+      }
+      
+      // Get user data
+      let userData: UserData = {};
+      try {
+        const userDoc = await getDoc(doc(db, 'users', otherUserId));
+        if (userDoc.exists()) {
+          const userDocData = userDoc.data();
+          userData = {
+            username: userDocData.username,
+            displayName: userDocData.displayName,
+            avatar: userDocData.avatar,
+            email: userDocData.email
+          };
+        } else {
+          logger.warn('Other user not found', { otherUserId, chatId });
+          return null;
+        }
+      } catch (error) {
+        logger.warn('Failed to fetch user data during hydration', { otherUserId, error });
+        return null;
+      }
+
+      const isMessageSeen = lastMessage.senderId === currentUserId || lastMessage.seen === true;
+
+      const chatItem: ChatListItem = {
+        chatId,
+        receiverId: otherUserId,
+        username: userData.username || userData.displayName || userData.email?.split('@')[0] || 'Unknown User',
+        displayName: userData.displayName || userData.username || 'Unknown User',
+        avatar: userData.avatar,
+        lastMessage: lastMessage.text,
+        timestamp: lastMessage.timestamp?.toDate?.()?.getTime() || chatData.updatedAt?.toDate?.()?.getTime() || Date.now(),
+        seen: isMessageSeen
+      };
+
+      return chatItem;
+    });
+
+    const chatResults = await Promise.all(chatPromises);
+    const chats = chatResults
+      .filter((chat): chat is ChatListItem => chat !== null)
+      .sort((a, b) => b.timestamp - a.timestamp);
+
+    logger.debug('Hydrated chat list', { 
+      totalFound: snapshot.size, 
+      validChats: chats.length,
+      userId: currentUserId 
+    });
+
+    // Cache the hydrated data
+    setCachedChatList(currentUserId, chats);
+    
+    return chats;
+  } catch (error) {
+    logger.error('Error hydrating chat list', error);
+    return [];
+  }
+};
+
 export const subscribeToUserChatList = (
   currentUserId: string, 
   callback: (chats: ChatListItem[], isFromCache: boolean) => void
 ) => {
-  logger.debug('Setting up persistent chat list subscription', { userId: currentUserId });
+  logger.debug('Setting up enhanced chat list subscription', { userId: currentUserId });
   
   if (!currentUserId) {
     logger.error('No currentUserId provided to subscribeToUserChatList');
@@ -97,10 +220,19 @@ export const subscribeToUserChatList = (
   if (cachedChats.length > 0) {
     logger.debug('Returning cached chat list first', { chatCount: cachedChats.length });
     callback(cachedChats, true);
+  } else {
+    // If no cache, perform one-time hydration to get all chats
+    logger.debug('No cache found, performing hydration');
+    hydrateUserChatList(currentUserId).then(hydratedChats => {
+      if (hydratedChats.length > 0) {
+        logger.debug('Hydration completed', { chatCount: hydratedChats.length });
+        callback(hydratedChats, true);
+      }
+    });
   }
 
   try {
-    // Query the main chats collection where the current user is in the users array
+    // Set up real-time subscription for updates
     const chatsRef = collection(db, 'chats');
     const q = query(
       chatsRef,
@@ -112,28 +244,29 @@ export const subscribeToUserChatList = (
     return onSnapshot(q, async (snapshot) => {
       logger.debug('Live chat list updated', { chatCount: snapshot.size });
       
-      // Process all chats in parallel instead of sequentially
       const chatPromises = snapshot.docs.map(async (docSnapshot) => {
         const chatData = docSnapshot.data();
         const chatId = docSnapshot.id;
         
-        // Skip chats without users array or if user is not in it
         if (!chatData.users || !Array.isArray(chatData.users) || !chatData.users.includes(currentUserId)) {
           return null;
         }
         
-        // Get the other user's ID
         const otherUserId = chatData.users.find((id: string) => id !== currentUserId);
         if (!otherUserId) {
           return null;
         }
         
-        // Skip chats without a last message (empty chats)
-        if (!chatData.lastMessage?.text || chatData.lastMessage.text.trim() === '') {
-          return null;
+        // Enhanced message checking - try to get from messages subcollection if needed
+        let lastMessage = chatData.lastMessage;
+        if (!lastMessage?.text || lastMessage.text.trim() === '') {
+          lastMessage = await getLatestMessage(chatId);
+          if (!lastMessage?.text) {
+            return null;
+          }
         }
         
-        // Get user data for the other user
+        // Get user data
         let userData: UserData = {};
         try {
           const userDoc = await getDoc(doc(db, 'users', otherUserId));
@@ -153,8 +286,7 @@ export const subscribeToUserChatList = (
           return null;
         }
 
-        // Improved seen logic: message is seen if current user sent it OR if it's marked as seen
-        const isMessageSeen = chatData.lastMessage.senderId === currentUserId || chatData.lastMessage.seen === true;
+        const isMessageSeen = lastMessage.senderId === currentUserId || lastMessage.seen === true;
 
         const chatItem: ChatListItem = {
           chatId,
@@ -162,18 +294,15 @@ export const subscribeToUserChatList = (
           username: userData.username || userData.displayName || userData.email?.split('@')[0] || 'Unknown User',
           displayName: userData.displayName || userData.username || 'Unknown User',
           avatar: userData.avatar,
-          lastMessage: chatData.lastMessage.text,
-          timestamp: chatData.lastMessage.timestamp?.toDate?.()?.getTime() || chatData.updatedAt?.toDate?.()?.getTime() || Date.now(),
+          lastMessage: lastMessage.text,
+          timestamp: lastMessage.timestamp?.toDate?.()?.getTime() || chatData.updatedAt?.toDate?.()?.getTime() || Date.now(),
           seen: isMessageSeen
         };
 
         return chatItem;
       });
 
-      // Wait for all chat processing to complete
       const chatResults = await Promise.all(chatPromises);
-      
-      // Filter out null results and sort by timestamp descending
       const chats = chatResults
         .filter((chat): chat is ChatListItem => chat !== null)
         .sort((a, b) => b.timestamp - a.timestamp);
@@ -185,13 +314,11 @@ export const subscribeToUserChatList = (
       callback(chats, false);
     }, (error) => {
       logger.error('Error in live chat list subscription', error);
-      // On error, return cached data if available
       const cachedChats = getCachedChatList(currentUserId);
       callback(cachedChats, true);
     });
   } catch (error) {
     logger.error('Error setting up chat list subscription', error);
-    // Return cached data on setup error
     const cachedChats = getCachedChatList(currentUserId);
     callback(cachedChats, true);
     return () => {};

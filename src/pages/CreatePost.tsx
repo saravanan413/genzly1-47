@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { uploadPostMedia, createPost } from '../services/mediaService';
+import { uploadPostMedia, createPostSkeleton, updatePostWithMedia } from '../services/mediaService';
 import { shareMediaToChats } from '../services/chat/shareService';
 import { useToast } from '@/hooks/use-toast';
 import { logger } from '../utils/logger';
@@ -136,16 +136,14 @@ const CreatePost = () => {
         fileToUpload = await compressImage(selectedMedia.file);
       }
       
-      // Upload media to Firebase Storage
-      const mediaURL = await uploadPostMedia(fileToUpload, currentUser.uid);
+      // Create post skeleton first
+      const postId = await createPostSkeleton(currentUser.uid, caption, selectedMedia.type);
       
-      // Create post in Firestore
-      await createPost(
-        currentUser.uid,
-        caption,
-        mediaURL,
-        selectedMedia.type
-      );
+      // Upload media to Firebase Storage
+      const mediaURL = await uploadPostMedia(fileToUpload, postId);
+      
+      // Update post with media URL
+      await updatePostWithMedia(postId, mediaURL);
       
       toast({
         title: "Success!",

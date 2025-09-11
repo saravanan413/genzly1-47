@@ -64,6 +64,7 @@ export const sendChatMessage = async (
 
 interface ChatDocument {
   users: string[];
+  participants: string[]; // Added for storage rules compatibility
   createdAt: ReturnType<typeof serverTimestamp>;
   lastMessage: {
     text: string;
@@ -100,6 +101,7 @@ export const ensureChatExists = async (userId1: string, userId2: string) => {
     // Create chat document with proper structure for querying
     const chatData: ChatDocument = {
       users: [userId1, userId2], // This is crucial for array-contains queries
+      participants: [userId1, userId2], // Added for storage rules compatibility
       createdAt: serverTimestamp(),
       lastMessage: {
         text: '',

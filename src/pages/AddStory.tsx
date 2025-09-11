@@ -3,7 +3,7 @@ import { useState, useRef } from 'react';
 import { ArrowLeft, Camera, Image, Type, Palette, Send, VideoIcon } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { uploadStoryMedia, createStory } from '../services/mediaService';
+import { uploadStoryMedia, createStorySkeleton, updateStoryWithMedia } from '../services/mediaService';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import CropImageModal from "@/components/CropImageModal";
@@ -69,9 +69,14 @@ const AddStory = () => {
 
     try {
       if (selectedFile) {
+        // Create story skeleton first
+        const storyId = await createStorySkeleton(currentUser.uid, selectedFile.type);
+        
         // Upload media story
-        const mediaURL = await uploadStoryMedia(selectedFile.file, currentUser.uid);
-        await createStory(currentUser.uid, mediaURL, selectedFile.type);
+        const mediaURL = await uploadStoryMedia(selectedFile.file, storyId);
+        
+        // Update story with media URL
+        await updateStoryWithMedia(storyId, mediaURL);
       } else {
         // Create text-only story (you'd need to generate an image from text)
         // For now, we'll skip text-only stories or create a simple colored background

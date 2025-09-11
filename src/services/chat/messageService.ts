@@ -30,6 +30,7 @@ interface MessageData {
 
 interface ChatDocument {
   users: string[];
+  participants: string[]; // Added for storage rules compatibility
   lastMessage: {
     text: string;
     timestamp: ReturnType<typeof serverTimestamp>;
@@ -123,6 +124,7 @@ export const sendMessage = async (
     
     const chatData: ChatDocument = {
       users: [senderId, receiverId],
+      participants: [senderId, receiverId], // Added for storage rules compatibility
       lastMessage: {
         text: text.trim(),
         timestamp: serverTimestamp(),

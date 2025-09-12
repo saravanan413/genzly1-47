@@ -140,7 +140,7 @@ const CreatePost = () => {
       const postId = await createPostSkeleton(currentUser.uid, caption, selectedMedia.type);
       
       // Upload media to Firebase Storage
-      const mediaURL = await uploadPostMedia(fileToUpload, postId);
+      const mediaURL = await uploadPostMedia(fileToUpload, currentUser.uid, postId);
       
       // Update post with media URL
       await updatePostWithMedia(postId, mediaURL);

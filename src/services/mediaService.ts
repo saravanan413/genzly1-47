@@ -28,11 +28,11 @@ export const uploadChatMedia = async (file: File, chatId: string, messageId: str
   }
 };
 
-export const uploadPostMedia = async (file: File, postId: string): Promise<string> => {
+export const uploadPostMedia = async (file: File, userId: string, postId: string): Promise<string> => {
   try {
     const fileExtension = file.name.split('.').pop();
     const fileName = `${postId}.${fileExtension}`;
-    const storageRef = ref(storage, `posts/${postId}/${fileName}`);
+    const storageRef = ref(storage, `posts/${userId}/${fileName}`);
     
     const snapshot = await uploadBytes(storageRef, file);
     const downloadURL = await getDownloadURL(snapshot.ref);
@@ -92,11 +92,11 @@ export const uploadProfilePicture = async (file: File, userId: string): Promise<
   }
 };
 
-export const uploadStoryMedia = async (file: File, storyId: string): Promise<string> => {
+export const uploadStoryMedia = async (file: File, userId: string, storyId: string): Promise<string> => {
   try {
     const fileExtension = file.name.split('.').pop();
     const fileName = `${storyId}.${fileExtension}`;
-    const storageRef = ref(storage, `stories/${storyId}/${fileName}`);
+    const storageRef = ref(storage, `stories/${userId}/${fileName}`);
     
     const snapshot = await uploadBytes(storageRef, file);
     const downloadURL = await getDownloadURL(snapshot.ref);
@@ -116,7 +116,7 @@ export const createStory = async (
   try {
     const storiesRef = collection(db, 'stories');
     const docRef = await addDoc(storiesRef, {
-      uid: userId, // Changed from userId to uid to match storage rules
+      userId: userId, // Use userId for consistency with other collections
       mediaURL,
       mediaType,
       timestamp: serverTimestamp(),
@@ -181,7 +181,7 @@ export const createStorySkeleton = async (userId: string, mediaType: 'image' | '
   try {
     const storiesRef = collection(db, 'stories');
     const docRef = await addDoc(storiesRef, {
-      uid: userId, // Using uid to match storage rules
+      userId: userId, // Use userId for consistency
       mediaURL: '', // Will be updated after upload
       mediaType,
       timestamp: serverTimestamp(),

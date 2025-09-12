@@ -1,5 +1,5 @@
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Heart, MessageCircle, Share, MoreHorizontal } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
@@ -10,6 +10,7 @@ import PostContextMenu from './PostContextMenu';
 import { useAuth } from '../../contexts/AuthContext';
 import { formatDistanceToNow } from 'date-fns';
 import { Post } from '../../services/firestoreService';
+import { likePost, unlikePost, checkIfLiked, subscribeLikes, Like } from '../../services/postReactionsService';
 
 interface FeedPostProps {
   post: Post;
@@ -31,7 +32,25 @@ const FeedPost: React.FC<FeedPostProps> = ({
   const { currentUser } = useAuth();
   const [showHeartAnimation, setShowHeartAnimation] = useState(false);
   const [isLiked, setIsLiked] = useState(false);
+  const [likes, setLikes] = useState<Like[]>([]);
+  const [likeCount, setLikeCount] = useState(post.likeCount || post.likes || 0);
   const imageRef = useRef<HTMLDivElement>(null);
+
+  // Check if user has liked this post and subscribe to likes
+  useEffect(() => {
+    if (!currentUser || !post.id) return;
+
+    // Check if user has liked this post
+    checkIfLiked(post.id, currentUser.uid).then(setIsLiked);
+
+    // Subscribe to real-time likes updates
+    const unsubscribe = subscribeLikes(post.id, (likesData) => {
+      setLikes(likesData);
+      setLikeCount(likesData.length);
+    });
+
+    return () => unsubscribe();
+  }, [post.id, currentUser]);
 
   const isOwnPost = currentUser?.uid === post.userId;
 
@@ -45,9 +64,21 @@ const FeedPost: React.FC<FeedPostProps> = ({
     onDoubleClick(post.id);
   };
 
-  const handleLikeClick = () => {
-    onLike(post.id);
-    setIsLiked(!isLiked);
+  const handleLikeClick = async () => {
+    if (!currentUser) return;
+
+    try {
+      if (isLiked) {
+        await unlikePost(post.id, currentUser.uid);
+        setIsLiked(false);
+      } else {
+        await likePost(post.id, currentUser.uid);
+        setIsLiked(true);
+      }
+      onLike(post.id);
+    } catch (error) {
+      console.error('Error toggling like:', error);
+    }
   };
 
   const timeAgo = post.timestamp ? formatDistanceToNow(new Date(post.timestamp.seconds * 1000), { addSuffix: true }) : 'Just now';
@@ -150,7 +181,7 @@ const FeedPost: React.FC<FeedPostProps> = ({
 
         {/* Likes count */}
         <div className="text-sm font-semibold mb-1">
-          {post.likes} likes
+          {likeCount} likes
         </div>
 
         {/* Caption */}
@@ -164,12 +195,12 @@ const FeedPost: React.FC<FeedPostProps> = ({
         )}
 
         {/* View comments */}
-        {post.comments > 0 && (
+        {(post.commentCount || post.comments) > 0 && (
           <button
             onClick={() => onCommentClick(post.id)}
             className="text-sm text-gray-500 dark:text-gray-400 mt-1 hover:underline"
           >
-            View all {post.comments} comments
+            View all {post.commentCount || post.comments} comments
           </button>
         )}
       </div>

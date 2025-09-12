@@ -1,16 +1,16 @@
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { X, Heart, MessageCircle, Send } from 'lucide-react';
+import { subscribeComments, addComment, Comment } from '../services/postReactionsService';
+import { getUserProfile } from '../services/firestoreService';
+import { useAuth } from '../contexts/AuthContext';
 
-interface Comment {
-  id: string;
+interface CommentWithUser extends Comment {
   user: {
     name: string;
     avatar: string;
   };
-  text: string;
   likes: number;
-  timestamp: string;
   isLiked: boolean;
 }
 
@@ -21,31 +21,38 @@ interface CommentPageProps {
 }
 
 const CommentPage = ({ isOpen, onClose, postId }: CommentPageProps) => {
+  const { currentUser } = useAuth();
   const [comment, setComment] = useState('');
-  const [comments, setComments] = useState<Comment[]>([
-    {
-      id: '1',
-      user: {
-        name: 'john_doe',
-        avatar: 'https://via.placeholder.com/32/87CEEB/000000?Text=J'
-      },
-      text: 'Amazing photo! 😍',
-      likes: 12,
-      timestamp: '2h',
-      isLiked: false
-    },
-    {
-      id: '2',
-      user: {
-        name: 'jane_smith',
-        avatar: 'https://via.placeholder.com/32/FFB6C1/000000?Text=J'
-      },
-      text: 'Love this! Where was this taken?',
-      likes: 8,
-      timestamp: '1h',
-      isLiked: true
-    }
-  ]);
+  const [comments, setComments] = useState<CommentWithUser[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!isOpen || !postId) return;
+
+    const unsubscribe = subscribeComments(postId, async (firebaseComments) => {
+      const commentsWithUsers = await Promise.all(
+        firebaseComments.map(async (comment) => {
+          const userProfile = await getUserProfile(comment.userId);
+          return {
+            ...comment,
+            user: {
+              name: userProfile?.username || 'unknown',
+              avatar: userProfile?.avatar || '/placeholder.svg'
+            },
+            likes: 0, // TODO: Implement comment likes
+            isLiked: false, // TODO: Implement comment likes
+            timestamp: comment.timestamp?.seconds 
+              ? new Date(comment.timestamp.seconds * 1000).toLocaleString()
+              : 'Just now'
+          };
+        })
+      );
+      setComments(commentsWithUsers);
+      setLoading(false);
+    });
+
+    return () => unsubscribe();
+  }, [isOpen, postId]);
 
   const handleLikeComment = (commentId: string) => {
     setComments(prev => prev.map(c => 
@@ -55,21 +62,14 @@ const CommentPage = ({ isOpen, onClose, postId }: CommentPageProps) => {
     ));
   };
 
-  const handleSubmitComment = () => {
-    if (comment.trim()) {
-      const newComment: Comment = {
-        id: Date.now().toString(),
-        user: {
-          name: 'you',
-          avatar: 'https://via.placeholder.com/32/DDA0DD/000000?Text=Y'
-        },
-        text: comment,
-        likes: 0,
-        timestamp: 'now',
-        isLiked: false
-      };
-      setComments(prev => [newComment, ...prev]);
-      setComment('');
+  const handleSubmitComment = async () => {
+    if (comment.trim() && currentUser) {
+      try {
+        await addComment(postId, currentUser.uid, comment);
+        setComment('');
+      } catch (error) {
+        console.error('Error submitting comment:', error);
+      }
     }
   };
 
@@ -91,7 +91,12 @@ const CommentPage = ({ isOpen, onClose, postId }: CommentPageProps) => {
 
         {/* Comments List */}
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
-          {comments.map((comment) => (
+          {loading ? (
+            <div className="text-center text-muted-foreground">Loading comments...</div>
+          ) : comments.length === 0 ? (
+            <div className="text-center text-muted-foreground">No comments yet. Be the first to comment!</div>
+          ) : (
+            comments.map((comment) => (
             <div key={comment.id} className="flex space-x-3">
               <img 
                 src={comment.user.avatar} 
@@ -121,14 +126,15 @@ const CommentPage = ({ isOpen, onClose, postId }: CommentPageProps) => {
                 </div>
               </div>
             </div>
-          ))}
+            ))
+          )}
         </div>
 
         {/* Comment Input */}
         <div className="p-4 border-t bg-background">
           <div className="flex items-center space-x-3">
             <img 
-              src="https://via.placeholder.com/32/DDA0DD/000000?Text=Y"
+              src={currentUser?.photoURL || '/placeholder.svg'}
               alt="Your avatar"
               className="w-8 h-8 rounded-full"
             />

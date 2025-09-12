@@ -39,7 +39,9 @@ export interface Post {
   mediaType: 'image' | 'video';
   timestamp: any;
   likes: number;
+  likeCount: number;
   comments: number;
+  commentCount: number;
   user: {
     username: string;
     displayName: string;
@@ -51,6 +53,7 @@ export interface Reel {
   id: string;
   userId: string;
   videoURL: string;
+  mediaURL?: string;
   thumbnailURL?: string;
   caption: string;
   music?: string;

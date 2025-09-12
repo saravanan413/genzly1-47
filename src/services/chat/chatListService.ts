@@ -21,6 +21,8 @@ export interface ChatListItem {
   lastMessage: string;
   timestamp: number;
   seen: boolean;
+  lastSenderId: string;
+  unreadCount: number;
 }
 
 interface UserData {
@@ -167,6 +169,7 @@ export const hydrateUserChatList = async (currentUserId: string): Promise<ChatLi
       }
 
       const isMessageSeen = lastMessage.senderId === currentUserId || lastMessage.seen === true;
+      const unreadCount = (!isMessageSeen && lastMessage.senderId !== currentUserId) ? 1 : 0;
 
       const chatItem: ChatListItem = {
         chatId,
@@ -176,7 +179,9 @@ export const hydrateUserChatList = async (currentUserId: string): Promise<ChatLi
         avatar: userData.avatar,
         lastMessage: lastMessage.text,
         timestamp: lastMessage.timestamp?.toDate?.()?.getTime() || chatData.updatedAt?.toDate?.()?.getTime() || Date.now(),
-        seen: isMessageSeen
+        seen: isMessageSeen,
+        lastSenderId: lastMessage.senderId || '',
+        unreadCount
       };
 
       return chatItem;
@@ -236,9 +241,7 @@ export const subscribeToUserChatList = (
     const chatsRef = collection(db, 'chats');
     const q = query(
       chatsRef,
-      where('users', 'array-contains', currentUserId),
-      orderBy('updatedAt', 'desc'),
-      limit(50)
+      where('users', 'array-contains', currentUserId)
     );
 
     return onSnapshot(q, async (snapshot) => {
@@ -287,6 +290,7 @@ export const subscribeToUserChatList = (
         }
 
         const isMessageSeen = lastMessage.senderId === currentUserId || lastMessage.seen === true;
+        const unreadCount = (!isMessageSeen && lastMessage.senderId !== currentUserId) ? 1 : 0;
 
         const chatItem: ChatListItem = {
           chatId,
@@ -296,7 +300,9 @@ export const subscribeToUserChatList = (
           avatar: userData.avatar,
           lastMessage: lastMessage.text,
           timestamp: lastMessage.timestamp?.toDate?.()?.getTime() || chatData.updatedAt?.toDate?.()?.getTime() || Date.now(),
-          seen: isMessageSeen
+          seen: isMessageSeen,
+          lastSenderId: lastMessage.senderId || '',
+          unreadCount
         };
 
         return chatItem;

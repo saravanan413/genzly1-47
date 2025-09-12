@@ -83,10 +83,10 @@ const ChatList: React.FC<ChatListProps> = ({
                 className="w-14 h-14 rounded-full object-cover"
                 onError={handleImageError}
               />
-              {isUnread && (
-                <div className="absolute -top-1 -right-1 w-5 h-5 bg-primary rounded-full flex items-center justify-center">
-                  <span className="text-xs text-primary-foreground font-medium">
-                    {chat.unreadCount > 9 ? '9+' : chat.unreadCount}
+              {isUnread && chat.unreadCount > 0 && (
+                <div className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 rounded-full flex items-center justify-center">
+                  <span className="text-xs text-white font-medium">
+                    {chat.unreadCount > 99 ? '99+' : chat.unreadCount}
                   </span>
                 </div>
               )}

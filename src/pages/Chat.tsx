@@ -51,7 +51,8 @@ const Chat = () => {
         });
         
         // Always update the full chat list (don't append, replace completely)
-        setChatList(chats);
+        // Safety guard: don't clear list on empty live snapshots
+        setChatList(prev => (!fromCache && chats.length === 0 ? prev : chats));
         setIsFromCache(fromCache);
         
         // Only set loading to false after we get live data or if no cache exists
@@ -113,10 +114,10 @@ const Chat = () => {
     lastMessage: chat.lastMessage ? {
       text: chat.lastMessage,
       timestamp: chat.timestamp,
-      senderId: chat.receiverId,
+      senderId: chat.lastSenderId,
       seen: chat.seen
     } : null,
-    unreadCount: chat.seen ? 0 : 1
+    unreadCount: chat.unreadCount
   }));
 
   // Show loading only if we're still loading auth or if we have no cache and no data

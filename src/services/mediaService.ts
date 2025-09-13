@@ -55,7 +55,8 @@ export const createPost = async (
     const docRef = await addDoc(postsRef, {
       userId,
       caption,
-      mediaURL,
+      mediaURL, // legacy field for backward compatibility
+      mediaUrl: mediaURL, // required by security rules
       mediaType,
       timestamp: serverTimestamp(),
       likes: 0,

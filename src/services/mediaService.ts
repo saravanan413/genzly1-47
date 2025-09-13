@@ -65,28 +65,43 @@ export const uploadPostMedia = async (
     return new Promise((resolve, reject) => {
       const uploadTask = uploadBytesResumable(storageRef, file);
       
-      // Set timeout for 2 minutes
-      const timeout = setTimeout(() => {
-        uploadTask.cancel();
-        reject(new Error('Upload timeout. Please try again.'));
-      }, 2 * 60 * 1000);
-      
+      // Stall detection: cancel only if no progress for 30s (no hard overall timeout)
+      const STALL_TIMEOUT_MS = 30_000;
+      let lastTransferred = 0;
+      let stallTimer: ReturnType<typeof setTimeout>;
+
+      const resetStallTimer = () => {
+        clearTimeout(stallTimer);
+        stallTimer = setTimeout(() => {
+          uploadTask.cancel();
+          reject(new Error('Upload stalled. Please check your connection and try again.'));
+        }, STALL_TIMEOUT_MS);
+      };
+
+      // initialize stall timer
+      resetStallTimer();
+
       uploadTask.on(
         'state_changed',
         (snapshot) => {
           const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
           onProgress?.(progress);
+
+          if (snapshot.bytesTransferred !== lastTransferred) {
+            lastTransferred = snapshot.bytesTransferred;
+            resetStallTimer();
+          }
         },
         (error) => {
-          clearTimeout(timeout);
+          clearTimeout(stallTimer);
           console.error('Error uploading post media:', error);
           
           // Provide specific error messages
-          if (error.code === 'storage/unauthorized') {
+          if ((error as any).code === 'storage/unauthorized') {
             reject(new Error('Upload unauthorized. Please check your permissions.'));
-          } else if (error.code === 'storage/canceled') {
+          } else if ((error as any).code === 'storage/canceled') {
             reject(new Error('Upload was cancelled.'));
-          } else if (error.code === 'storage/quota-exceeded') {
+          } else if ((error as any).code === 'storage/quota-exceeded') {
             reject(new Error('Storage quota exceeded. Please try again later.'));
           } else {
             reject(new Error('Upload failed. Please try again.'));
@@ -94,11 +109,11 @@ export const uploadPostMedia = async (
         },
         async () => {
           try {
-            clearTimeout(timeout);
+            clearTimeout(stallTimer);
             const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
             resolve(downloadURL);
           } catch (error) {
-            clearTimeout(timeout);
+            clearTimeout(stallTimer);
             reject(error);
           }
         }

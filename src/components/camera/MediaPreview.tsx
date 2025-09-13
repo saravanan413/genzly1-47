@@ -94,18 +94,20 @@ const MediaPreview: React.FC<MediaPreviewProps> = ({
                 className="w-full relative overflow-hidden"
                 size="lg"
               >
-                {loading && uploadProgress > 0 && (
+                {loading && (
                   <div 
-                    className="absolute inset-0 bg-primary/30 transition-all duration-300 ease-out"
-                    style={{ width: `${uploadProgress}%` }}
+                    className="absolute inset-0 bg-white/20 transition-all duration-500 ease-out"
+                    style={{ width: `${Math.max(uploadProgress, 5)}%` }}
                   />
                 )}
-                <div className="relative z-10 flex items-center">
+                <div className="relative z-10 flex items-center justify-center w-full">
                   {loading ? (
-                    <>
+                    <div className="flex items-center">
                       <div className="animate-spin rounded-full w-4 h-4 border-b-2 border-white mr-2"></div>
-                      {uploadProgress > 0 ? `${Math.round(uploadProgress)}%` : 'Processing...'}
-                    </>
+                      <span className="font-medium">
+                        {uploadProgress > 0 ? `${Math.round(uploadProgress)}%` : 'Processing...'}
+                      </span>
+                    </div>
                   ) : (
                     <>
                       <Send size={18} className="mr-2" />
@@ -123,18 +125,20 @@ const MediaPreview: React.FC<MediaPreviewProps> = ({
                 className="w-full relative overflow-hidden"
                 size="lg"
               >
-                {loading && uploadProgress > 0 && (
+                {loading && (
                   <div 
-                    className="absolute inset-0 bg-primary/30 transition-all duration-300 ease-out"
-                    style={{ width: `${uploadProgress}%` }}
+                    className="absolute inset-0 bg-white/20 transition-all duration-500 ease-out"
+                    style={{ width: `${Math.max(uploadProgress, 5)}%` }}
                   />
                 )}
-                <div className="relative z-10 flex items-center">
+                <div className="relative z-10 flex items-center justify-center w-full">
                   {loading ? (
-                    <>
+                    <div className="flex items-center">
                       <div className="animate-spin rounded-full w-4 h-4 border-b-2 border-white mr-2"></div>
-                      {uploadProgress > 0 ? `${Math.round(uploadProgress)}%` : 'Processing...'}
-                    </>
+                      <span className="font-medium">
+                        {uploadProgress > 0 ? `${Math.round(uploadProgress)}%` : 'Processing...'}
+                      </span>
+                    </div>
                   ) : (
                     <>
                       <Send size={18} className="mr-2" />

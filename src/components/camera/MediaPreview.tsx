@@ -10,7 +10,6 @@ interface MediaPreviewProps {
   onPost: (caption: string) => void;
   onShareToFollowers: () => void;
   loading?: boolean;
-  uploadProgress?: number;
 }
 
 const MediaPreview: React.FC<MediaPreviewProps> = ({ 
@@ -18,13 +17,16 @@ const MediaPreview: React.FC<MediaPreviewProps> = ({
   onBack, 
   onPost, 
   onShareToFollowers,
-  loading = false,
-  uploadProgress = 0
+  loading = false
 }) => {
   const [caption, setCaption] = useState('');
 
   const handleSubmit = () => {
     onPost(caption);
+  };
+
+  const handleShareToFollowers = () => {
+    onShareToFollowers?.();
   };
 
   return (
@@ -76,7 +78,7 @@ const MediaPreview: React.FC<MediaPreviewProps> = ({
           <div className="space-y-3">
             {/* Share to Followers Button */}
             <Button
-              onClick={onShareToFollowers}
+              onClick={handleShareToFollowers}
               disabled={loading}
               className="w-full"
               size="lg"
@@ -91,30 +93,20 @@ const MediaPreview: React.FC<MediaPreviewProps> = ({
               <Button
                 onClick={handleSubmit}
                 disabled={loading}
-                className="w-full relative overflow-hidden"
+                className="w-full"
                 size="lg"
               >
-                {loading && (
-                  <div 
-                    className="absolute inset-0 bg-white/20 transition-all duration-500 ease-out"
-                    style={{ width: `${Math.max(uploadProgress, 5)}%` }}
-                  />
+                {loading ? (
+                  <div className="flex items-center">
+                    <div className="animate-spin rounded-full w-4 h-4 border-b-2 border-white mr-2"></div>
+                    <span className="font-medium">Processing...</span>
+                  </div>
+                ) : (
+                  <>
+                    <Send size={18} className="mr-2" />
+                    Share Post
+                  </>
                 )}
-                <div className="relative z-10 flex items-center justify-center w-full">
-                  {loading ? (
-                    <div className="flex items-center">
-                      <div className="animate-spin rounded-full w-4 h-4 border-b-2 border-white mr-2"></div>
-                      <span className="font-medium">
-                        {uploadProgress > 0 ? `${Math.round(uploadProgress)}%` : 'Processing...'}
-                      </span>
-                    </div>
-                  ) : (
-                    <>
-                      <Send size={18} className="mr-2" />
-                      Share Post
-                    </>
-                  )}
-                </div>
               </Button>
             )}
             
@@ -122,30 +114,20 @@ const MediaPreview: React.FC<MediaPreviewProps> = ({
               <Button
                 onClick={handleSubmit}
                 disabled={loading}
-                className="w-full relative overflow-hidden"
+                className="w-full"
                 size="lg"
               >
-                {loading && (
-                  <div 
-                    className="absolute inset-0 bg-white/20 transition-all duration-500 ease-out"
-                    style={{ width: `${Math.max(uploadProgress, 5)}%` }}
-                  />
+                {loading ? (
+                  <div className="flex items-center">
+                    <div className="animate-spin rounded-full w-4 h-4 border-b-2 border-white mr-2"></div>
+                    <span className="font-medium">Processing...</span>
+                  </div>
+                ) : (
+                  <>
+                    <Send size={18} className="mr-2" />
+                    Share as Reel
+                  </>
                 )}
-                <div className="relative z-10 flex items-center justify-center w-full">
-                  {loading ? (
-                    <div className="flex items-center">
-                      <div className="animate-spin rounded-full w-4 h-4 border-b-2 border-white mr-2"></div>
-                      <span className="font-medium">
-                        {uploadProgress > 0 ? `${Math.round(uploadProgress)}%` : 'Processing...'}
-                      </span>
-                    </div>
-                  ) : (
-                    <>
-                      <Send size={18} className="mr-2" />
-                      Share as Reel
-                    </>
-                  )}
-                </div>
               </Button>
             )}
           </div>

@@ -2,6 +2,7 @@
 import { ref, uploadBytesResumable, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { storage, db } from '../config/firebase';
+import { compressImageIfNeeded } from '../utils/imageCompression';
 
 // File size limits
 const MAX_IMAGE_SIZE = 10 * 1024 * 1024; // 10MB
@@ -49,26 +50,39 @@ export const uploadChatMedia = async (file: File, chatId: string, messageId: str
 };
 
 export const uploadPostMedia = async (
-  file: File, 
-  userId: string, 
-  postId: string, 
+  file: File,
+  userId: string,
+  postId: string,
   onProgress?: (progress: number) => void
 ): Promise<string> => {
   try {
-    // Validate file size
+    // Validate file size (keep limits unchanged)
     validateFileSize(file);
-    
-    const fileExtension = file.name.split('.').pop();
+
+    // Lightweight client-side compression for images to speed up uploads
+    const fileToUpload = file.type.startsWith('image/')
+      ? await compressImageIfNeeded(file)
+      : file;
+
+    const fileExtension = fileToUpload.name.split('.').pop();
     const fileName = `${postId}.${fileExtension}`;
     const storageRef = ref(storage, `posts/${userId}/${fileName}`);
-    
+
     return new Promise((resolve, reject) => {
-      const uploadTask = uploadBytesResumable(storageRef, file);
-      
-      // Stall detection: cancel only if no progress for 30s (no hard overall timeout)
+      const metadata = { contentType: fileToUpload.type } as const;
+      const uploadTask = uploadBytesResumable(storageRef, fileToUpload, metadata);
+
+      // Keep 2-minute hard timeout, plus stall detection for resiliency
       const STALL_TIMEOUT_MS = 30_000;
+      const OVERALL_TIMEOUT_MS = 2 * 60 * 1000;
       let lastTransferred = 0;
       let stallTimer: ReturnType<typeof setTimeout>;
+      let overallTimer: ReturnType<typeof setTimeout>;
+
+      const cleanup = () => {
+        clearTimeout(stallTimer);
+        clearTimeout(overallTimer);
+      };
 
       const resetStallTimer = () => {
         clearTimeout(stallTimer);
@@ -78,8 +92,12 @@ export const uploadPostMedia = async (
         }, STALL_TIMEOUT_MS);
       };
 
-      // initialize stall timer
+      // Initialize timers
       resetStallTimer();
+      overallTimer = setTimeout(() => {
+        uploadTask.cancel();
+        reject(new Error('Upload timeout. Please try again.'));
+      }, OVERALL_TIMEOUT_MS);
 
       uploadTask.on(
         'state_changed',
@@ -93,9 +111,9 @@ export const uploadPostMedia = async (
           }
         },
         (error) => {
-          clearTimeout(stallTimer);
+          cleanup();
           console.error('Error uploading post media:', error);
-          
+
           // Provide specific error messages
           if ((error as any).code === 'storage/unauthorized') {
             reject(new Error('Upload unauthorized. Please check your permissions.'));
@@ -109,11 +127,11 @@ export const uploadPostMedia = async (
         },
         async () => {
           try {
-            clearTimeout(stallTimer);
+            cleanup();
             const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
             resolve(downloadURL);
           } catch (error) {
-            clearTimeout(stallTimer);
+            cleanup();
             reject(error);
           }
         }

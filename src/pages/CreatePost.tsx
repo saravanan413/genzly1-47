@@ -16,6 +16,7 @@ const CreatePost = () => {
   const [viewMode, setViewMode] = useState<ViewMode>('camera');
   const [selectedMedia, setSelectedMedia] = useState<{type: 'image' | 'video', data: string, file: File} | null>(null);
   const [loading, setLoading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const navigate = useNavigate();
   const { currentUser } = useAuth();
   const { toast } = useToast();
@@ -81,13 +82,19 @@ const CreatePost = () => {
 
   const compressImage = async (file: File): Promise<File> => {
     return new Promise((resolve) => {
+      // Skip compression for small files (under 1MB)
+      if (file.size < 1024 * 1024) {
+        resolve(file);
+        return;
+      }
+      
       const canvas = document.createElement('canvas');
       const ctx = canvas.getContext('2d');
       const img = new Image();
       
       img.onload = () => {
-        // Calculate new dimensions (max 1080px)
-        const maxSize = 1080;
+        // Calculate new dimensions (max 1080px for large images, 720px for very large)
+        const maxSize = file.size > 5 * 1024 * 1024 ? 720 : 1080; // Smaller for very large files
         let { width, height } = img;
         
         if (width > height) {
@@ -107,17 +114,23 @@ const CreatePost = () => {
         
         ctx?.drawImage(img, 0, 0, width, height);
         
-        canvas.toBlob((blob) => {
-          if (blob) {
-            const compressedFile = new File([blob], file.name, {
-              type: 'image/jpeg',
-              lastModified: Date.now()
-            });
-            resolve(compressedFile);
-          } else {
-            resolve(file);
-          }
-        }, 'image/jpeg', 0.8);
+        // Use lower quality for larger files
+        const quality = file.size > 5 * 1024 * 1024 ? 0.5 : 0.6;
+        
+        // Process in chunks to avoid blocking UI
+        setTimeout(() => {
+          canvas.toBlob((blob) => {
+            if (blob) {
+              const compressedFile = new File([blob], file.name, {
+                type: 'image/jpeg',
+                lastModified: Date.now()
+              });
+              resolve(compressedFile);
+            } else {
+              resolve(file);
+            }
+          }, 'image/jpeg', quality);
+        }, 0);
       };
       
       img.src = URL.createObjectURL(file);
@@ -128,17 +141,53 @@ const CreatePost = () => {
     if (!selectedMedia || !currentUser) return;
     
     setLoading(true);
+    setUploadProgress(0);
     
     try {
+      // Validate file size first
+      const isImage = selectedMedia.type === 'image';
+      const maxSize = isImage ? 10 * 1024 * 1024 : 50 * 1024 * 1024; // 10MB for images, 50MB for videos
+      
+      if (selectedMedia.file.size > maxSize) {
+        throw new Error(`File too large. Maximum size is ${isImage ? '10MB' : '50MB'}.`);
+      }
+      
       // Compress media if it's an image
       let fileToUpload = selectedMedia.file;
       if (selectedMedia.type === 'image') {
+        toast({
+          title: "Processing...",
+          description: "Optimizing image for upload"
+        });
         fileToUpload = await compressImage(selectedMedia.file);
       }
       
+      toast({
+        title: "Uploading...",
+        description: "0% complete"
+      });
+      
       // Upload to Storage first, then create Firestore post (to satisfy rules)
       const storageKey = `p_${Date.now()}`;
-      const mediaURL = await uploadPostMedia(fileToUpload, currentUser.uid, storageKey);
+      const mediaURL = await uploadPostMedia(
+        fileToUpload, 
+        currentUser.uid, 
+        storageKey, 
+        (progress) => {
+          setUploadProgress(progress);
+          if (progress > 0) {
+            toast({
+              title: "Uploading...",
+              description: `${Math.round(progress)}% complete`
+            });
+          }
+        }
+      );
+      
+      toast({
+        title: "Finalizing...",
+        description: "Creating post"
+      });
       
       // Create post with mediaUrl in a single write
       await createPost(currentUser.uid, caption, mediaURL, selectedMedia.type);
@@ -152,13 +201,15 @@ const CreatePost = () => {
       navigate('/');
     } catch (error) {
       logger.error('Error posting content:', error);
+      const errorMessage = error instanceof Error ? error.message : "Failed to share content. Please try again.";
       toast({
         title: "Error",
-        description: "Failed to share content. Please try again.",
+        description: errorMessage,
         variant: "destructive"
       });
     } finally {
       setLoading(false);
+      setUploadProgress(0);
     }
   };
 
@@ -199,6 +250,7 @@ const CreatePost = () => {
           onPost={handlePost}
           onShareToFollowers={handleShareToFollowers}
           loading={loading}
+          uploadProgress={uploadProgress}
         />
       ) : null;
     

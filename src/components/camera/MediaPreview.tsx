@@ -10,6 +10,7 @@ interface MediaPreviewProps {
   onPost: (caption: string) => void;
   onShareToFollowers: () => void;
   loading?: boolean;
+  uploadProgress?: number;
 }
 
 const MediaPreview: React.FC<MediaPreviewProps> = ({ 
@@ -17,7 +18,8 @@ const MediaPreview: React.FC<MediaPreviewProps> = ({
   onBack, 
   onPost, 
   onShareToFollowers,
-  loading = false 
+  loading = false,
+  uploadProgress = 0
 }) => {
   const [caption, setCaption] = useState('');
 
@@ -95,7 +97,7 @@ const MediaPreview: React.FC<MediaPreviewProps> = ({
                 {loading ? (
                   <>
                     <div className="animate-spin rounded-full w-4 h-4 border-b-2 border-white mr-2"></div>
-                    Posting...
+                    {uploadProgress > 0 ? `Uploading ${Math.round(uploadProgress)}%` : 'Processing...'}
                   </>
                 ) : (
                   <>
@@ -116,7 +118,7 @@ const MediaPreview: React.FC<MediaPreviewProps> = ({
                 {loading ? (
                   <>
                     <div className="animate-spin rounded-full w-4 h-4 border-b-2 border-white mr-2"></div>
-                    Sharing...
+                    {uploadProgress > 0 ? `Uploading ${Math.round(uploadProgress)}%` : 'Processing...'}
                   </>
                 ) : (
                   <>

@@ -1,7 +1,27 @@
 
-import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
+import { ref, uploadBytesResumable, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { storage, db } from '../config/firebase';
+
+// File size limits
+const MAX_IMAGE_SIZE = 10 * 1024 * 1024; // 10MB
+const MAX_VIDEO_SIZE = 50 * 1024 * 1024; // 50MB
+
+// Validate file size
+const validateFileSize = (file: File): void => {
+  const isImage = file.type.startsWith('image/');
+  const isVideo = file.type.startsWith('video/');
+  
+  if (isImage && file.size > MAX_IMAGE_SIZE) {
+    throw new Error('Image file too large. Maximum size is 10MB.');
+  }
+  if (isVideo && file.size > MAX_VIDEO_SIZE) {
+    throw new Error('Video file too large. Maximum size is 50MB.');
+  }
+  if (!isImage && !isVideo) {
+    throw new Error('Invalid file type. Only images and videos are allowed.');
+  }
+};
 
 export const uploadChatMedia = async (file: File, chatId: string, messageId: string): Promise<string> => {
   try {
@@ -28,16 +48,62 @@ export const uploadChatMedia = async (file: File, chatId: string, messageId: str
   }
 };
 
-export const uploadPostMedia = async (file: File, userId: string, postId: string): Promise<string> => {
+export const uploadPostMedia = async (
+  file: File, 
+  userId: string, 
+  postId: string, 
+  onProgress?: (progress: number) => void
+): Promise<string> => {
   try {
+    // Validate file size
+    validateFileSize(file);
+    
     const fileExtension = file.name.split('.').pop();
     const fileName = `${postId}.${fileExtension}`;
     const storageRef = ref(storage, `posts/${userId}/${fileName}`);
     
-    const snapshot = await uploadBytes(storageRef, file);
-    const downloadURL = await getDownloadURL(snapshot.ref);
-    
-    return downloadURL;
+    return new Promise((resolve, reject) => {
+      const uploadTask = uploadBytesResumable(storageRef, file);
+      
+      // Set timeout for 2 minutes
+      const timeout = setTimeout(() => {
+        uploadTask.cancel();
+        reject(new Error('Upload timeout. Please try again.'));
+      }, 2 * 60 * 1000);
+      
+      uploadTask.on(
+        'state_changed',
+        (snapshot) => {
+          const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+          onProgress?.(progress);
+        },
+        (error) => {
+          clearTimeout(timeout);
+          console.error('Error uploading post media:', error);
+          
+          // Provide specific error messages
+          if (error.code === 'storage/unauthorized') {
+            reject(new Error('Upload unauthorized. Please check your permissions.'));
+          } else if (error.code === 'storage/canceled') {
+            reject(new Error('Upload was cancelled.'));
+          } else if (error.code === 'storage/quota-exceeded') {
+            reject(new Error('Storage quota exceeded. Please try again later.'));
+          } else {
+            reject(new Error('Upload failed. Please try again.'));
+          }
+        },
+        async () => {
+          try {
+            clearTimeout(timeout);
+            const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
+            resolve(downloadURL);
+          } catch (error) {
+            clearTimeout(timeout);
+            reject(error);
+          }
+        }
+      );
+    });
   } catch (error) {
     console.error('Error uploading post media:', error);
     throw error;

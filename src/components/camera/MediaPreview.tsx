@@ -91,20 +91,28 @@ const MediaPreview: React.FC<MediaPreviewProps> = ({
               <Button
                 onClick={handleSubmit}
                 disabled={loading}
-                className="w-full"
+                className="w-full relative overflow-hidden"
                 size="lg"
               >
-                {loading ? (
-                  <>
-                    <div className="animate-spin rounded-full w-4 h-4 border-b-2 border-white mr-2"></div>
-                    {uploadProgress > 0 ? `Uploading ${Math.round(uploadProgress)}%` : 'Processing...'}
-                  </>
-                ) : (
-                  <>
-                    <Send size={18} className="mr-2" />
-                    Share Post
-                  </>
+                {loading && uploadProgress > 0 && (
+                  <div 
+                    className="absolute inset-0 bg-primary/30 transition-all duration-300 ease-out"
+                    style={{ width: `${uploadProgress}%` }}
+                  />
                 )}
+                <div className="relative z-10 flex items-center">
+                  {loading ? (
+                    <>
+                      <div className="animate-spin rounded-full w-4 h-4 border-b-2 border-white mr-2"></div>
+                      {uploadProgress > 0 ? `${Math.round(uploadProgress)}%` : 'Processing...'}
+                    </>
+                  ) : (
+                    <>
+                      <Send size={18} className="mr-2" />
+                      Share Post
+                    </>
+                  )}
+                </div>
               </Button>
             )}
             
@@ -112,20 +120,28 @@ const MediaPreview: React.FC<MediaPreviewProps> = ({
               <Button
                 onClick={handleSubmit}
                 disabled={loading}
-                className="w-full"
+                className="w-full relative overflow-hidden"
                 size="lg"
               >
-                {loading ? (
-                  <>
-                    <div className="animate-spin rounded-full w-4 h-4 border-b-2 border-white mr-2"></div>
-                    {uploadProgress > 0 ? `Uploading ${Math.round(uploadProgress)}%` : 'Processing...'}
-                  </>
-                ) : (
-                  <>
-                    <Send size={18} className="mr-2" />
-                    Share as Reel
-                  </>
+                {loading && uploadProgress > 0 && (
+                  <div 
+                    className="absolute inset-0 bg-primary/30 transition-all duration-300 ease-out"
+                    style={{ width: `${uploadProgress}%` }}
+                  />
                 )}
+                <div className="relative z-10 flex items-center">
+                  {loading ? (
+                    <>
+                      <div className="animate-spin rounded-full w-4 h-4 border-b-2 border-white mr-2"></div>
+                      {uploadProgress > 0 ? `${Math.round(uploadProgress)}%` : 'Processing...'}
+                    </>
+                  ) : (
+                    <>
+                      <Send size={18} className="mr-2" />
+                      Share as Reel
+                    </>
+                  )}
+                </div>
               </Button>
             )}
           </div>

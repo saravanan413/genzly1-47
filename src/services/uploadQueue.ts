@@ -81,6 +81,7 @@ class UploadQueueService {
       userId,
       caption,
       mediaUrl: thumbnail, // Start with thumbnail
+      mediaURL: thumbnail, // Legacy compatibility
       mediaType,
       timestamp: serverTimestamp(),
       likes: 0,
@@ -175,6 +176,7 @@ class UploadQueueService {
     const postRef = doc(db, 'posts', postId);
     await updateDoc(postRef, {
       mediaUrl,
+      mediaURL: mediaUrl, // Legacy compatibility
       uploading: false // Remove uploading flag
     });
   }

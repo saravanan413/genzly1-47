@@ -88,7 +88,7 @@ const FeedPost: React.FC<FeedPostProps> = ({
       {/* Post Header */}
       <div className="flex items-center justify-between p-4">
         <div className="flex items-center space-x-3">
-          <Link to={`/profile/${post.userId}`}>
+          <Link to={`/user/${post.userId}`}>
             <img
               src={post.user.avatar || '/placeholder.svg'}
               alt={post.user.username}
@@ -96,7 +96,7 @@ const FeedPost: React.FC<FeedPostProps> = ({
             />
           </Link>
           <div className="flex items-center space-x-2">
-            <Link to={`/profile/${post.userId}`}>
+            <Link to={`/user/${post.userId}`}>
               <span className="font-semibold text-sm hover:underline">
                 {post.user.username}
               </span>
@@ -187,7 +187,7 @@ const FeedPost: React.FC<FeedPostProps> = ({
         {/* Caption */}
         {post.caption && (
           <div className="text-sm">
-            <Link to={`/profile/${post.userId}`} className="font-semibold hover:underline">
+            <Link to={`/user/${post.userId}`} className="font-semibold hover:underline">
               {post.user.username}
             </Link>
             <span className="ml-2">{post.caption}</span>

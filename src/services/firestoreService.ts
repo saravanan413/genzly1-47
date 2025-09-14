@@ -125,6 +125,7 @@ export const getFeedPosts = async (lastDoc?: DocumentSnapshot, limitCount = 10):
       posts.push({
         id: docSnap.id,
         ...postData,
+        mediaURL: postData.mediaURL || postData.mediaUrl, // Normalize field
         user: {
           username: userProfile?.username || 'unknown',
           displayName: userProfile?.displayName || 'Unknown User',
@@ -156,6 +157,7 @@ export const getUserPosts = async (userId: string): Promise<Post[]> => {
     return snapshot.docs.map(doc => ({
       id: doc.id,
       ...doc.data(),
+      mediaURL: doc.data().mediaURL || doc.data().mediaUrl, // Normalize field
       user: {
         username: userProfile?.username || 'unknown',
         displayName: userProfile?.displayName || 'Unknown User',

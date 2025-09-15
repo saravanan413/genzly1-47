@@ -139,13 +139,13 @@ export const useProfilePhotoHandlers = () => {
         }
       }
       
-      // Create unique filename with userId for better security matching
+      // Create unique filename
       const timestamp = Date.now();
-      const fileName = `${currentUser.uid}_profile_${timestamp}.jpg`;
+      const fileName = `profile_${timestamp}.jpg`;
       
       console.log('Creating storage reference...');
-      // Updated path to match storage rules better
-      const storageRef = ref(storage, `profilePictures/${currentUser.uid}_profile_${timestamp}.jpg`);
+      // Updated path to match storage rules: /profilePictures/{userId}/{fileName}
+      const storageRef = ref(storage, `profilePictures/${currentUser.uid}/${fileName}`);
       
       console.log('Starting upload to Firebase Storage...');
       const snapshot = await uploadBytes(storageRef, finalBlob, {
@@ -160,10 +160,11 @@ export const useProfilePhotoHandlers = () => {
       const downloadURL = await getDownloadURL(snapshot.ref);
       console.log('Download URL obtained:', downloadURL);
       
-      console.log('Updating user document in Firestore...');
+      // Update user document in Firestore with photoURL for compatibility
       const userDocRef = doc(db, 'users', currentUser.uid);
       await updateDoc(userDocRef, {
         avatar: downloadURL,
+        photoURL: downloadURL, // Also update photoURL for compatibility
         updatedAt: new Date()
       });
       
@@ -230,9 +231,11 @@ export const useProfilePhotoHandlers = () => {
     setUploading(true);
     
     try {
+      // Clear both avatar and photoURL fields
       const userDocRef = doc(db, 'users', currentUser.uid);
       await updateDoc(userDocRef, {
         avatar: '',
+        photoURL: '', // Also clear photoURL for compatibility
         updatedAt: new Date()
       });
       

@@ -4,20 +4,16 @@ import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { storage, db } from '../config/firebase';
 import { compressImageIfNeeded } from '../utils/imageCompression';
 
-// File size limits
-const MAX_IMAGE_SIZE = 10 * 1024 * 1024; // 10MB
-const MAX_VIDEO_SIZE = 50 * 1024 * 1024; // 50MB
+// File size limits - increased to 100MB for all media
+const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB
 
 // Validate file size
 const validateFileSize = (file: File): void => {
   const isImage = file.type.startsWith('image/');
   const isVideo = file.type.startsWith('video/');
   
-  if (isImage && file.size > MAX_IMAGE_SIZE) {
-    throw new Error('Image file too large. Maximum size is 10MB.');
-  }
-  if (isVideo && file.size > MAX_VIDEO_SIZE) {
-    throw new Error('Video file too large. Maximum size is 50MB.');
+  if (file.size > MAX_FILE_SIZE) {
+    throw new Error('File too large. Maximum size is 100MB.');
   }
   if (!isImage && !isVideo) {
     throw new Error('Invalid file type. Only images and videos are allowed.');
@@ -56,12 +52,16 @@ export const uploadPostMedia = async (
   onProgress?: (progress: number) => void
 ): Promise<string> => {
   try {
-    // Validate file size (keep limits unchanged)
+    // Validate file size
     validateFileSize(file);
 
-    // Lightweight client-side compression for images to speed up uploads
+    // High quality compression for images
     const fileToUpload = file.type.startsWith('image/')
-      ? await compressImageIfNeeded(file)
+      ? await compressImageIfNeeded(file, { 
+          maxDimension: 1920, 
+          quality: 0.9,
+          minSizeToCompress: 2 * 1024 * 1024 // Only compress if >2MB
+        })
       : file;
 
     const fileExtension = fileToUpload.name.split('.').pop();
@@ -150,6 +150,10 @@ export const createPost = async (
   mediaType: 'image' | 'video'
 ): Promise<string> => {
   try {
+    // Get user profile for denormalization
+    const { getUserProfile } = await import('./userService');
+    const userProfile = await getUserProfile(userId);
+    
     const postsRef = collection(db, 'posts');
     const docRef = await addDoc(postsRef, {
       userId,
@@ -159,7 +163,13 @@ export const createPost = async (
       mediaType,
       timestamp: serverTimestamp(),
       likes: 0,
-      likedBy: []
+      likedBy: [],
+      // Denormalized user data
+      user: {
+        username: userProfile?.username || 'unknown',
+        displayName: userProfile?.displayName || 'Unknown User',
+        avatar: userProfile?.avatar || '/placeholder.svg'
+      }
     });
     return docRef.id;
   } catch (error) {

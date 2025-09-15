@@ -76,6 +76,10 @@ class UploadQueueService {
     thumbnail: string,
     mediaType: 'image' | 'video'
   ): Promise<string> {
+    // Get user profile for denormalization
+    const { getUserProfile } = await import('./userService');
+    const userProfile = await getUserProfile(userId);
+    
     const postsRef = collection(db, 'posts');
     const docRef = await addDoc(postsRef, {
       userId,
@@ -86,7 +90,13 @@ class UploadQueueService {
       timestamp: serverTimestamp(),
       likes: 0,
       likedBy: [],
-      uploading: true // Flag to indicate still uploading
+      uploading: true, // Flag to indicate still uploading
+      // Denormalized user data
+      user: {
+        username: userProfile?.username || 'unknown',
+        displayName: userProfile?.displayName || 'Unknown User',
+        avatar: userProfile?.avatar || '/placeholder.svg'
+      }
     });
     return docRef.id;
   }

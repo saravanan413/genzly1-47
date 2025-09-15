@@ -51,6 +51,10 @@ export const createReel = async (
 
 export const createReelSkeleton = async (userId: string, caption: string, music?: string): Promise<string> => {
   try {
+    // Get user profile for denormalization
+    const { getUserProfile } = await import('./userService');
+    const userProfile = await getUserProfile(userId);
+    
     const reelsRef = collection(db, 'reels');
     const docRef = await addDoc(reelsRef, {
       userId,
@@ -62,7 +66,13 @@ export const createReelSkeleton = async (userId: string, caption: string, music?
       timestamp: serverTimestamp(),
       likeCount: 0,
       commentCount: 0,
-      shares: 0
+      shares: 0,
+      // Denormalized user data
+      user: {
+        username: userProfile?.username || 'unknown',
+        displayName: userProfile?.displayName || 'Unknown User',
+        avatar: userProfile?.avatar || '/placeholder.svg'
+      }
     });
     return docRef.id;
   } catch (error) {

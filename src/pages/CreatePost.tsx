@@ -89,27 +89,38 @@ const CreatePost = () => {
     setLoading(true);
     
     try {
-      // Validate file size first
-      const isImage = selectedMedia.type === 'image';
-      const maxSize = isImage ? 10 * 1024 * 1024 : 50 * 1024 * 1024; // 10MB for images, 50MB for videos
-      
-      if (selectedMedia.file.size > maxSize) {
-        throw new Error(`File too large. Maximum size is ${isImage ? '10MB' : '50MB'}.`);
+      // Check if it's a video - treat videos as reels
+      if (selectedMedia.type === 'video') {
+        const { createReelSkeleton, uploadReelVideo, updateReelWithMedia } = await import('../services/reelService');
+        
+        // Create reel skeleton first
+        const reelId = await createReelSkeleton(currentUser.uid, caption);
+        
+        // Upload video to correct path
+        const videoURL = await uploadReelVideo(selectedMedia.file, currentUser.uid, reelId);
+        
+        // Update reel with video URL
+        await updateReelWithMedia(reelId, videoURL);
+        
+        toast({
+          title: "Reel uploaded!",
+          description: "Your reel has been posted successfully."
+        });
+      } else {
+        // Handle images as regular posts
+        await addUpload(currentUser.uid, selectedMedia.file, caption, selectedMedia.type);
+        
+        toast({
+          title: "Post uploading!",
+          description: "Your post is uploading in the background."
+        });
       }
-
-      // Add to upload queue - this handles compression, thumbnails, and background upload
-      await addUpload(currentUser.uid, selectedMedia.file, caption, selectedMedia.type);
-      
-      toast({
-        title: "Post queued!",
-        description: "Your post is uploading in the background. You can continue using the app."
-      });
       
       // Navigate back to home immediately
       navigate('/');
     } catch (error) {
       logger.error('Error posting content:', error);
-      const errorMessage = error instanceof Error ? error.message : "Failed to queue post. Please try again.";
+      const errorMessage = error instanceof Error ? error.message : "Failed to upload. Please try again.";
       toast({
         title: "Error",
         description: errorMessage,

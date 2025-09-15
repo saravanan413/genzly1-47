@@ -16,9 +16,9 @@ export async function compressImageIfNeeded(
   try {
     if (!file.type.startsWith('image/')) return file;
 
-    const maxDimension = options.maxDimension ?? 1440;
-    const quality = options.quality ?? 0.82;
-    const minSizeToCompress = options.minSizeToCompress ?? 1_000_000; // 1MB
+    const maxDimension = options.maxDimension ?? 1920;
+    const quality = options.quality ?? 0.9;
+    const minSizeToCompress = options.minSizeToCompress ?? 2_000_000; // 2MB
 
     if (file.size <= minSizeToCompress) return file;
 

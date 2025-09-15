@@ -10,7 +10,7 @@ export const uploadReelVideo = async (file: File, userId: string, reelId: string
   try {
     const fileExtension = file.name.split('.').pop();
     const fileName = `${reelId}.${fileExtension}`;
-    const storageRef = ref(storage, `reels/${userId}/${fileName}`);
+    const storageRef = ref(storage, `reels/${reelId}/${fileName}`);
     
     const snapshot = await uploadBytes(storageRef, file);
     const downloadURL = await getDownloadURL(snapshot.ref);

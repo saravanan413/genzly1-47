@@ -105,7 +105,7 @@ class UploadQueueService {
       const storageKey = `p_${task.postId}`;
       const mediaUrl = await this.uploadWithResume(
         fileToUpload,
-        task.userId,
+        task.postId!,
         storageKey,
         task
       );
@@ -134,13 +134,13 @@ class UploadQueueService {
 
   private async uploadWithResume(
     file: File,
-    userId: string,
+    postId: string,
     storageKey: string,
     task: UploadTask
   ): Promise<string> {
     const fileExtension = file.name.split('.').pop();
     const fileName = `${storageKey}.${fileExtension}`;
-    const storageRef = ref(storage, `posts/${userId}/${fileName}`);
+    const storageRef = ref(storage, `posts/${postId}/${fileName}`);
 
     return new Promise((resolve, reject) => {
       const uploadTask = uploadBytesResumable(storageRef, file);

@@ -40,37 +40,61 @@ export const createStory = async (
   try {
     let mediaUrl = '';
     let mediaType: 'image' | 'video' = 'image';
+    let tempStoryRef: any = null;
 
-    if (mediaFile) {
-      // Upload media to Firebase Storage
-      const storageRef = ref(storage, `stories/${userId}/${Date.now()}_${mediaFile.name}`);
-      const uploadResult = await uploadBytes(storageRef, mediaFile);
-      mediaUrl = await getDownloadURL(uploadResult.ref);
-      mediaType = mediaFile.type.startsWith('video/') ? 'video' : 'image';
-    }
-
-    // Get user data
+    // Get user data first
     const userDoc = await getDocs(query(collection(db, 'users'), where('__name__', '==', userId)));
     const userData = userDoc.docs[0]?.data();
 
-    const storyData = {
-      userId,
-      username: userData?.username || 'Unknown',
-      displayName: userData?.displayName || 'Unknown User',
-      avatar: userData?.avatar || null,
-      mediaUrl,
-      mediaType,
-      text: text || '',
-      backgroundColor: backgroundColor || '#000000',
-      createdAt: serverTimestamp(),
-      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 hours
-      viewers: [],
-      viewCount: 0
-    };
+    if (mediaFile) {
+      // Create story document first to get storyId
+      tempStoryRef = await addDoc(collection(db, 'stories'), {
+        userId,
+        username: userData?.username || 'Unknown',
+        displayName: userData?.displayName || 'Unknown User',
+        avatar: userData?.avatar || null,
+        mediaUrl: '',
+        mediaType: mediaFile.type.startsWith('video/') ? 'video' : 'image',
+        text: text || '',
+        backgroundColor: backgroundColor || '#000000',
+        createdAt: serverTimestamp(),
+        expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+        viewers: [],
+        viewCount: 0
+      });
+      
+      // Upload media to Firebase Storage using storyId
+      const storageRef = ref(storage, `stories/${tempStoryRef.id}/${Date.now()}_${mediaFile.name}`);
+      const uploadResult = await uploadBytes(storageRef, mediaFile);
+      mediaUrl = await getDownloadURL(uploadResult.ref);
+      mediaType = mediaFile.type.startsWith('video/') ? 'video' : 'image';
+      
+      // Update story with media URL
+      await updateDoc(tempStoryRef, { mediaUrl });
+      
+      console.log('Story created with ID:', tempStoryRef.id);
+      return tempStoryRef.id;
+    } else {
+      // If no media file, create story normally
+      const storyData = {
+        userId,
+        username: userData?.username || 'Unknown',
+        displayName: userData?.displayName || 'Unknown User',
+        avatar: userData?.avatar || null,
+        mediaUrl,
+        mediaType,
+        text: text || '',
+        backgroundColor: backgroundColor || '#000000',
+        createdAt: serverTimestamp(),
+        expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 hours
+        viewers: [],
+        viewCount: 0
+      };
 
-    const storyRef = await addDoc(collection(db, 'stories'), storyData);
-    console.log('Story created with ID:', storyRef.id);
-    return storyRef.id;
+      const storyRef = await addDoc(collection(db, 'stories'), storyData);
+      console.log('Story created with ID:', storyRef.id);
+      return storyRef.id;
+    }
   } catch (error) {
     console.error('Error creating story:', error);
     throw error;

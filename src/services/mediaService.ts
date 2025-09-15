@@ -66,7 +66,7 @@ export const uploadPostMedia = async (
 
     const fileExtension = fileToUpload.name.split('.').pop();
     const fileName = `${postId}.${fileExtension}`;
-    const storageRef = ref(storage, `posts/${userId}/${fileName}`);
+    const storageRef = ref(storage, `posts/${postId}/${fileName}`);
 
     return new Promise((resolve, reject) => {
       const metadata = { contentType: fileToUpload.type } as const;
@@ -196,7 +196,7 @@ export const uploadStoryMedia = async (file: File, userId: string, storyId: stri
   try {
     const fileExtension = file.name.split('.').pop();
     const fileName = `${storyId}.${fileExtension}`;
-    const storageRef = ref(storage, `stories/${userId}/${fileName}`);
+    const storageRef = ref(storage, `stories/${storyId}/${fileName}`);
     
     const snapshot = await uploadBytes(storageRef, file);
     const downloadURL = await getDownloadURL(snapshot.ref);
@@ -234,7 +234,7 @@ export const uploadReelMedia = async (file: File, userId: string, reelId?: strin
   try {
     const fileExtension = file.name.split('.').pop();
     const fileName = reelId ? `${reelId}.${fileExtension}` : `${Date.now()}.${fileExtension}`;
-    const storageRef = ref(storage, `reels/${userId}/${fileName}`);
+    const storageRef = ref(storage, `reels/${reelId || Date.now()}/${fileName}`);
     
     const snapshot = await uploadBytes(storageRef, file);
     const downloadURL = await getDownloadURL(snapshot.ref);

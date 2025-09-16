@@ -32,15 +32,8 @@ export const useProfilePhotoHandlers = () => {
       return;
     }
     
-    // Increased file size limit to 10MB
-    if (file.size > 10 * 1024 * 1024) {
-      toast({
-        title: "File too large",
-        description: "Image must be less than 10MB",
-        variant: "destructive"
-      });
-      return;
-    }
+    
+    
     
     const reader = new FileReader();
     reader.onload = (event) => {
@@ -97,51 +90,13 @@ export const useProfilePhotoHandlers = () => {
       const blob = await response.blob();
       console.log('Original blob created, size:', blob.size, 'type:', blob.type);
       
-      // Simple compression - only if blob is larger than 2MB
+      // Use the cropped image as-is without additional compression or resizing
       let finalBlob = blob;
-      if (blob.size > 2 * 1024 * 1024) {
-        console.log('Compressing image...');
-        try {
-          const canvas = document.createElement('canvas');
-          const ctx = canvas.getContext('2d');
-          const img = new Image();
-          
-          await new Promise<void>((resolve, reject) => {
-            img.onload = () => resolve();
-            img.onerror = () => reject(new Error('Failed to load image for compression'));
-            img.src = croppedImage;
-          });
-          
-          // Resize to max 400x400 for profile pictures to reduce size
-          const maxSize = 400;
-          const scale = Math.min(maxSize / img.width, maxSize / img.height, 1);
-          canvas.width = img.width * scale;
-          canvas.height = img.height * scale;
-          
-          if (ctx) {
-            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-            
-            finalBlob = await new Promise<Blob>((resolve, reject) => {
-              canvas.toBlob((blob) => {
-                if (blob) {
-                  resolve(blob);
-                } else {
-                  reject(new Error('Failed to compress image'));
-                }
-              }, 'image/jpeg', 0.8);
-            });
-            
-            console.log('Compressed blob size:', finalBlob.size);
-          }
-        } catch (compressionError) {
-          console.warn('Image compression failed, using original:', compressionError);
-          // Continue with original blob if compression fails
-        }
-      }
       
       // Create unique filename
       const timestamp = Date.now();
-      const fileName = `profile_${timestamp}.jpg`;
+      const ext = (finalBlob.type.split('/')?.[1] || 'jpeg').split(';')[0];
+      const fileName = `profile_${timestamp}.${ext}`;
       
       console.log('Creating storage reference...');
       // Updated path to match storage rules: /profilePictures/{userId}/{fileName}
@@ -149,7 +104,7 @@ export const useProfilePhotoHandlers = () => {
       
       console.log('Starting upload to Firebase Storage...');
       const snapshot = await uploadBytes(storageRef, finalBlob, {
-        contentType: 'image/jpeg',
+        contentType: finalBlob.type || 'image/jpeg',
         customMetadata: {
           userId: currentUser.uid,
           uploadedAt: new Date().toISOString()

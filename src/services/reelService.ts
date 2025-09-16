@@ -3,7 +3,7 @@ import {
   addDoc, 
   serverTimestamp 
 } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '../config/firebase';
 
 export const uploadReelVideo = async (file: File, userId: string, reelId: string): Promise<string> => {
@@ -12,9 +12,24 @@ export const uploadReelVideo = async (file: File, userId: string, reelId: string
     const fileName = `${reelId}.${fileExtension}`;
     const storageRef = ref(storage, `reels/${reelId}/${fileName}`);
     
-    const snapshot = await uploadBytes(storageRef, file);
-    const downloadURL = await getDownloadURL(snapshot.ref);
-    
+    // Use resumable upload for reliability
+    const uploadTask = uploadBytesResumable(storageRef, file, { contentType: file.type });
+
+    const downloadURL: string = await new Promise((resolve, reject) => {
+      uploadTask.on('state_changed',
+        () => {},
+        (error) => reject(error),
+        async () => {
+          try {
+            const url = await getDownloadURL(uploadTask.snapshot.ref);
+            resolve(url);
+          } catch (err) {
+            reject(err);
+          }
+        }
+      );
+    });
+
     return downloadURL;
   } catch (error) {
     console.error('Error uploading reel video:', error);

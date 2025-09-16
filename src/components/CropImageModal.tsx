@@ -58,7 +58,7 @@ function getCroppedImg(imageSrc: string, crop: any): Promise<string> {
         const reader = new FileReader();
         reader.onload = () => resolve(reader.result as string);
         reader.readAsDataURL(blob);
-      }, "image/jpeg", 0.85);
+      }, "image/jpeg", 1.0);
     };
     
     image.onerror = () => reject(new Error("Failed to load image"));

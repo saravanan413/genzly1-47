@@ -421,10 +421,10 @@ const CameraInterface: React.FC<CameraInterfaceProps> = ({ onMediaCaptured, onGa
     canvas.toBlob((blob) => {
       if (blob) {
         const file = new File([blob], 'captured-photo.jpg', { type: 'image/jpeg' });
-        const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+        const dataUrl = canvas.toDataURL('image/jpeg', 1.0);
         onMediaCaptured({ type: 'image', data: dataUrl, file });
       }
-    }, 'image/jpeg', 0.8);
+    }, 'image/jpeg', 1.0);
   };
 
   const startVideoRecording = () => {

@@ -1,14 +1,16 @@
 
 import React, { useState } from 'react';
-import { ArrowLeft, Send, Users } from 'lucide-react';
+import { ArrowLeft, Send, Users, Pencil } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
+import CropImageModal from '@/components/CropImageModal';
 
 interface MediaPreviewProps {
   media: { type: 'image' | 'video', data: string, file: File };
   onBack: () => void;
   onPost: (caption: string) => void;
   onShareToFollowers: () => void;
+  onUpdateMedia: (media: { type: 'image' | 'video'; data: string; file: File }) => void;
   loading?: boolean;
 }
 
@@ -17,6 +19,7 @@ const MediaPreview: React.FC<MediaPreviewProps> = ({
   onBack, 
   onPost, 
   onShareToFollowers,
+  onUpdateMedia,
   loading = false
 }) => {
   const [caption, setCaption] = useState('');

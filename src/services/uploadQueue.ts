@@ -1,7 +1,7 @@
 import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import { collection, addDoc, doc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { storage, db } from '../config/firebase';
-import { compressImageIfNeeded } from '../utils/imageCompression';
+
 import { generateThumbnail } from '../utils/thumbnailGenerator';
 
 export interface UploadTask {
@@ -106,10 +106,8 @@ class UploadQueueService {
       task.status = 'uploading';
       this.notifyListeners();
 
-      // Compress file if needed
-      const fileToUpload = task.mediaType === 'image' 
-        ? await compressImageIfNeeded(task.file)
-        : task.file;
+      // Upload original file without compression
+      const fileToUpload = task.file;
 
       // Upload to Firebase Storage with resumable upload
       const storageKey = `p_${task.postId}`;

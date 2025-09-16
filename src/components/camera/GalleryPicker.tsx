@@ -30,16 +30,6 @@ const GalleryPicker: React.FC<GalleryPickerProps> = ({ onMediaSelected, onBack }
       return;
     }
 
-    // Validate file size (50MB max)
-    const maxSize = 50 * 1024 * 1024;
-    if (file.size > maxSize) {
-      toast({
-        title: "File too large",
-        description: "Please select a file smaller than 50MB",
-        variant: "destructive"
-      });
-      return;
-    }
 
     const reader = new FileReader();
     reader.onload = (event) => {

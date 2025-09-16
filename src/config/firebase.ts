@@ -64,7 +64,7 @@ export const validateFileUpload = (file: File): { valid: boolean; error?: string
   const allowedImageTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
   const allowedVideoTypes = ['video/mp4', 'video/webm', 'video/mov'];
   const allowedAudioTypes = ['audio/mp3', 'audio/aac', 'audio/wav'];
-  const maxFileSize = 50 * 1024 * 1024; // 50MB
+  const maxFileSize = Number.POSITIVE_INFINITY; // no client-side size limit
 
   if (file.size > maxFileSize) {
     return { valid: false, error: 'File size exceeds 50MB limit' };

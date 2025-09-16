@@ -2,23 +2,8 @@
 import { ref, uploadBytesResumable, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { storage, db } from '../config/firebase';
-import { compressImageIfNeeded } from '../utils/imageCompression';
 
-// File size limits - increased to 100MB for all media
-const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB
 
-// Validate file size
-const validateFileSize = (file: File): void => {
-  const isImage = file.type.startsWith('image/');
-  const isVideo = file.type.startsWith('video/');
-  
-  if (file.size > MAX_FILE_SIZE) {
-    throw new Error('File too large. Maximum size is 100MB.');
-  }
-  if (!isImage && !isVideo) {
-    throw new Error('Invalid file type. Only images and videos are allowed.');
-  }
-};
 
 export const uploadChatMedia = async (file: File, chatId: string, messageId: string): Promise<string> => {
   try {
@@ -52,17 +37,8 @@ export const uploadPostMedia = async (
   onProgress?: (progress: number) => void
 ): Promise<string> => {
   try {
-    // Validate file size
-    validateFileSize(file);
-
-    // High quality compression for images
-    const fileToUpload = file.type.startsWith('image/')
-      ? await compressImageIfNeeded(file, { 
-          maxDimension: 1920, 
-          quality: 0.9,
-          minSizeToCompress: 2 * 1024 * 1024 // Only compress if >2MB
-        })
-      : file;
+    // Upload original file without client-side compression or size limit
+    const fileToUpload = file;
 
     const fileExtension = fileToUpload.name.split('.').pop();
     const fileName = `${postId}.${fileExtension}`;

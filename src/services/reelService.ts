@@ -6,7 +6,12 @@ import {
 import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '../config/firebase';
 
-export const uploadReelVideo = async (file: File, userId: string, reelId: string): Promise<string> => {
+export const uploadReelVideo = async (
+  file: File,
+  userId: string,
+  reelId: string,
+  onProgress?: (progress: number) => void
+): Promise<string> => {
   try {
     const fileExtension = file.name.split('.').pop();
     const fileName = `${reelId}.${fileExtension}`;
@@ -16,8 +21,12 @@ export const uploadReelVideo = async (file: File, userId: string, reelId: string
     const uploadTask = uploadBytesResumable(storageRef, file, { contentType: file.type });
 
     const downloadURL: string = await new Promise((resolve, reject) => {
-      uploadTask.on('state_changed',
-        () => {},
+      uploadTask.on(
+        'state_changed',
+        (snapshot) => {
+          const percent = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+          onProgress?.(percent);
+        },
         (error) => reject(error),
         async () => {
           try {

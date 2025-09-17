@@ -101,7 +101,14 @@ const CreatePost = () => {
         const reelId = await createReelSkeleton(currentUser.uid, caption);
         
         // Upload video to correct path
-        const videoURL = await uploadReelVideo(selectedMedia.file, currentUser.uid, reelId);
+        const videoURL = await uploadReelVideo(
+          selectedMedia.file,
+          currentUser.uid,
+          reelId,
+          (progress) => {
+            logger.info('Reel upload progress', { progress });
+          }
+        );
         
         // Update reel with video URL
         await updateReelWithMedia(reelId, videoURL);

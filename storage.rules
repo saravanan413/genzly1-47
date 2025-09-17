@@ -1,93 +1,44 @@
 
 rules_version = '2';
-
 service firebase.storage {
   match /b/{bucket}/o {
-
-    // ========================
-    // 1. Profile Pictures
-    // ========================
-    // Path: /profilePictures/{userId}/{fileName}
-    // - Anyone can read profile pictures
-    // - Only the owner (userId == auth.uid) can upload/delete
-    match /profilePictures/{userId}/{fileName} {
+    // Profile pictures - users can only upload their own profile picture
+    match /profilePictures/{fileName} {
       allow read: if true;
-      allow create: if request.auth != null && request.auth.uid == userId
-        && request.resource.size < 100 * 1024 * 1024; // 100MB max
-      allow update, delete: if request.auth != null && request.auth.uid == userId;
+      allow write: if request.auth != null && 
+        (fileName.matches('.*' + request.auth.uid + '.*') || 
+         fileName == request.auth.uid + '.jpg');
     }
-
-    // ========================
-    // 2. Post Media (Images/Videos)
-    // ========================
-    // Path: /posts/{postId}/{fileName}
-    // - Public read
-    // - Only the post owner can upload/delete
-    match /posts/{postId}/{fileName} {
+    
+    // Chat media - only chat participants can access
+    match /chats/{chatId}/media/{fileName} {
+      allow read, write, delete: if request.auth != null
+        && (request.auth.uid in
+            firestore.get(/databases/$(database)/documents/chats/$(chatId)).data.users);
+    }
+    
+    // Posts media
+    match /posts/{userId}/{fileName} {
       allow read: if true;
-
-      // ✅ Allow initial upload for authenticated users
-      allow create: if request.auth != null
-        && request.resource.size < 100 * 1024 * 1024; // 100MB max
-
-      // ✅ Restrict update/delete to the post owner
-      allow update, delete: if request.auth != null
-        && get(/databases/$(database)/documents/posts/$(postId)).data.userId == request.auth.uid;
+      allow write: if request.auth != null && request.auth.uid == userId;
     }
-
-    // ========================
-    // 3. Reels (Short Videos)
-    // ========================
-    // Path: /reels/{reelId}/{fileName}
-    // - Public read
-    // - Only reel owner can upload/delete
-    match /reels/{reelId}/{fileName} {
+    
+    // Stories media
+    match /stories/{userId}/{fileName} {
       allow read: if true;
-
-      // ✅ Allow initial upload for authenticated users
-      allow create: if request.auth != null
-        && request.resource.size < 100 * 1024 * 1024; // 100MB max
-
-      // ✅ Restrict update/delete to the reel owner
-      allow update, delete: if request.auth != null
-        && get(/databases/$(database)/documents/reels/$(reelId)).data.userId == request.auth.uid;
+      allow write: if request.auth != null && request.auth.uid == userId;
     }
-
-    // ========================
-    // 4. Stories (Images/Videos)
-    // ========================
-    // Path: /stories/{storyId}/{fileName}
-    // - Public read
-    // - Only story owner can upload/delete
-    match /stories/{storyId}/{fileName} {
+    
+    // Reels media
+    match /reels/{userId}/{fileName} {
       allow read: if true;
-      allow create: if request.auth != null
-        && request.resource.size < 100 * 1024 * 1024; // 100MB max
-      allow update, delete: if request.auth != null
-        && get(/databases/$(database)/documents/stories/$(storyId)).data.userId == request.auth.uid;
+      allow write: if request.auth != null && request.auth.uid == userId;
     }
-
-    // ========================
-    // 5. Chat Media (Images/Audio/Video)
-    // ========================
-    // Path: /chats/{chatId}/{messageId}/{fileName}
-    // - Only participants can read/write/delete
-    match /chats/{chatId}/{messageId}/{fileName} {
-      // Separate rules to avoid chicken-and-egg issues on initial upload
-      allow read: if request.auth != null
-        && (request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants);
-      allow create: if request.auth != null
-        && request.resource.size < 100 * 1024 * 1024; // 100MB max
-      allow update, delete: if request.auth != null
-        && (request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants);
-    }
-
-    // ========================
-    // 6. Default Deny
-    // ========================
-    // Denies access to all other paths by default
-    match /{allPaths=**} {
-      allow read, write: if false;
+    
+    // Users profile pictures (legacy path support)
+    match /users/{userId}/{fileName} {
+      allow read: if true;
+      allow write: if request.auth != null && request.auth.uid == userId;
     }
   }
 }

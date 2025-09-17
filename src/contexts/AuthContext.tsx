@@ -63,28 +63,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (user) {
         // Load user profile
         try {
-          let profile = await getUserProfile(user.uid);
-          if (!profile) {
-            // Create profile if it doesn't exist
-            const fallbackName = user.displayName || user.email?.split('@')[0] || 'User';
-            const fallbackAvatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(fallbackName)}&background=eee&color=555&size=200`;
-            
-            const profileData = {
-              id: user.uid,
-              email: user.email || '',
-              username: user.email?.split('@')[0] || `user${Date.now()}`,
-              displayName: fallbackName,
-              avatar: user.photoURL || fallbackAvatar,
-              bio: '',
-              externalLink: '',
-              followers: 0,
-              following: 0,
-              postsCount: 0
-            };
-            
-            await createOrUpdateUserProfile(user.uid, profileData);
-            profile = await getUserProfile(user.uid);
-          }
+          const profile = await getUserProfile(user.uid);
           setUserProfile(profile);
         } catch (error) {
           logger.error('Error loading user profile', error);

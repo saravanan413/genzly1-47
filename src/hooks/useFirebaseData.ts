@@ -1,7 +1,6 @@
 
 import { useState, useEffect } from 'react';
-import { DocumentSnapshot, collection, query, where, orderBy, onSnapshot } from 'firebase/firestore';
-import { db } from '../config/firebase';
+import { DocumentSnapshot } from 'firebase/firestore';
 import {
   getFeedPosts,
   getUserPosts,
@@ -80,43 +79,7 @@ export const useUserPosts = (userId: string) => {
       setLoading(false);
     };
 
-    // Set up real-time listener for user posts
-    const setupRealtimeListener = () => {
-      const q = query(
-        collection(db, 'posts'),
-        where('userId', '==', userId),
-        orderBy('timestamp', 'desc')
-      );
-      
-      return onSnapshot(q, async (snapshot) => {
-        const userPosts: Post[] = [];
-        const userProfile = await getUserProfile(userId);
-        
-        for (const doc of snapshot.docs) {
-          const postData = doc.data();
-          userPosts.push({
-            id: doc.id,
-            ...postData,
-            mediaURL: postData.mediaURL || postData.mediaUrl, // Normalize field
-            user: {
-              username: userProfile?.username || 'unknown',
-              displayName: userProfile?.displayName || 'Unknown User',
-              avatar: userProfile?.avatar
-            }
-          } as Post);
-        }
-        
-        setPosts(userPosts);
-        setLoading(false);
-      }, (error) => {
-        console.error('Error in real-time user posts listener:', error);
-        // Fallback to one-time load
-        loadUserPosts();
-      });
-    };
-
-    const unsubscribe = setupRealtimeListener();
-    return () => unsubscribe();
+    loadUserPosts();
   }, [userId]);
 
   return { posts, loading };

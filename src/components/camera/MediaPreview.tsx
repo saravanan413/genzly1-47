@@ -1,16 +1,14 @@
 
 import React, { useState } from 'react';
-import { ArrowLeft, Send, Users, Pencil } from 'lucide-react';
+import { ArrowLeft, Send, Users } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import CropImageModal from '@/components/CropImageModal';
 
 interface MediaPreviewProps {
   media: { type: 'image' | 'video', data: string, file: File };
   onBack: () => void;
   onPost: (caption: string) => void;
   onShareToFollowers: () => void;
-  onUpdateMedia: (media: { type: 'image' | 'video'; data: string; file: File }) => void;
   loading?: boolean;
 }
 
@@ -19,17 +17,12 @@ const MediaPreview: React.FC<MediaPreviewProps> = ({
   onBack, 
   onPost, 
   onShareToFollowers,
-  onUpdateMedia,
-  loading = false
+  loading = false 
 }) => {
   const [caption, setCaption] = useState('');
 
   const handleSubmit = () => {
     onPost(caption);
-  };
-
-  const handleShareToFollowers = () => {
-    onShareToFollowers?.();
   };
 
   return (
@@ -81,7 +74,7 @@ const MediaPreview: React.FC<MediaPreviewProps> = ({
           <div className="space-y-3">
             {/* Share to Followers Button */}
             <Button
-              onClick={handleShareToFollowers}
+              onClick={onShareToFollowers}
               disabled={loading}
               className="w-full"
               size="lg"
@@ -100,10 +93,10 @@ const MediaPreview: React.FC<MediaPreviewProps> = ({
                 size="lg"
               >
                 {loading ? (
-                  <div className="flex items-center">
+                  <>
                     <div className="animate-spin rounded-full w-4 h-4 border-b-2 border-white mr-2"></div>
-                    <span className="font-medium">Processing...</span>
-                  </div>
+                    Posting...
+                  </>
                 ) : (
                   <>
                     <Send size={18} className="mr-2" />
@@ -121,10 +114,10 @@ const MediaPreview: React.FC<MediaPreviewProps> = ({
                 size="lg"
               >
                 {loading ? (
-                  <div className="flex items-center">
+                  <>
                     <div className="animate-spin rounded-full w-4 h-4 border-b-2 border-white mr-2"></div>
-                    <span className="font-medium">Processing...</span>
-                  </div>
+                    Sharing...
+                  </>
                 ) : (
                   <>
                     <Send size={18} className="mr-2" />

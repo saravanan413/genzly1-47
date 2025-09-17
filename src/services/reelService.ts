@@ -3,42 +3,18 @@ import {
   addDoc, 
   serverTimestamp 
 } from 'firebase/firestore';
-import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '../config/firebase';
 
-export const uploadReelVideo = async (
-  file: File,
-  userId: string,
-  reelId: string,
-  onProgress?: (progress: number) => void
-): Promise<string> => {
+export const uploadReelVideo = async (file: File, userId: string, reelId: string): Promise<string> => {
   try {
     const fileExtension = file.name.split('.').pop();
     const fileName = `${reelId}.${fileExtension}`;
-    const storageRef = ref(storage, `reels/${reelId}/${fileName}`);
+    const storageRef = ref(storage, `reels/${userId}/${fileName}`);
     
-    // Use resumable upload for reliability
-    const uploadTask = uploadBytesResumable(storageRef, file, { contentType: file.type });
-
-    const downloadURL: string = await new Promise((resolve, reject) => {
-      uploadTask.on(
-        'state_changed',
-        (snapshot) => {
-          const percent = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-          onProgress?.(percent);
-        },
-        (error) => reject(error),
-        async () => {
-          try {
-            const url = await getDownloadURL(uploadTask.snapshot.ref);
-            resolve(url);
-          } catch (err) {
-            reject(err);
-          }
-        }
-      );
-    });
-
+    const snapshot = await uploadBytes(storageRef, file);
+    const downloadURL = await getDownloadURL(snapshot.ref);
+    
     return downloadURL;
   } catch (error) {
     console.error('Error uploading reel video:', error);
@@ -75,10 +51,6 @@ export const createReel = async (
 
 export const createReelSkeleton = async (userId: string, caption: string, music?: string): Promise<string> => {
   try {
-    // Get user profile for denormalization
-    const { getUserProfile } = await import('./userService');
-    const userProfile = await getUserProfile(userId);
-    
     const reelsRef = collection(db, 'reels');
     const docRef = await addDoc(reelsRef, {
       userId,
@@ -90,13 +62,7 @@ export const createReelSkeleton = async (userId: string, caption: string, music?
       timestamp: serverTimestamp(),
       likeCount: 0,
       commentCount: 0,
-      shares: 0,
-      // Denormalized user data
-      user: {
-        username: userProfile?.username || 'unknown',
-        displayName: userProfile?.displayName || 'Unknown User',
-        avatar: userProfile?.avatar || '/placeholder.svg'
-      }
+      shares: 0
     });
     return docRef.id;
   } catch (error) {

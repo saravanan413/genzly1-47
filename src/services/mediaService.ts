@@ -1,9 +1,7 @@
 
-import { ref, uploadBytesResumable, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
+import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { storage, db } from '../config/firebase';
-
-
 
 export const uploadChatMedia = async (file: File, chatId: string, messageId: string): Promise<string> => {
   try {
@@ -30,89 +28,16 @@ export const uploadChatMedia = async (file: File, chatId: string, messageId: str
   }
 };
 
-export const uploadPostMedia = async (
-  file: File,
-  userId: string,
-  postId: string,
-  onProgress?: (progress: number) => void
-): Promise<string> => {
+export const uploadPostMedia = async (file: File, userId: string, postId: string): Promise<string> => {
   try {
-    // Upload original file without client-side compression or size limit
-    const fileToUpload = file;
-
-    const fileExtension = fileToUpload.name.split('.').pop();
+    const fileExtension = file.name.split('.').pop();
     const fileName = `${postId}.${fileExtension}`;
-    const storageRef = ref(storage, `posts/${postId}/${fileName}`);
-
-    return new Promise((resolve, reject) => {
-      const metadata = { contentType: fileToUpload.type } as const;
-      const uploadTask = uploadBytesResumable(storageRef, fileToUpload, metadata);
-
-      // Keep 2-minute hard timeout, plus stall detection for resiliency
-      const STALL_TIMEOUT_MS = 30_000;
-      const OVERALL_TIMEOUT_MS = 2 * 60 * 1000;
-      let lastTransferred = 0;
-      let stallTimer: ReturnType<typeof setTimeout>;
-      let overallTimer: ReturnType<typeof setTimeout>;
-
-      const cleanup = () => {
-        clearTimeout(stallTimer);
-        clearTimeout(overallTimer);
-      };
-
-      const resetStallTimer = () => {
-        clearTimeout(stallTimer);
-        stallTimer = setTimeout(() => {
-          uploadTask.cancel();
-          reject(new Error('Upload stalled. Please check your connection and try again.'));
-        }, STALL_TIMEOUT_MS);
-      };
-
-      // Initialize timers
-      resetStallTimer();
-      overallTimer = setTimeout(() => {
-        uploadTask.cancel();
-        reject(new Error('Upload timeout. Please try again.'));
-      }, OVERALL_TIMEOUT_MS);
-
-      uploadTask.on(
-        'state_changed',
-        (snapshot) => {
-          const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-          onProgress?.(progress);
-
-          if (snapshot.bytesTransferred !== lastTransferred) {
-            lastTransferred = snapshot.bytesTransferred;
-            resetStallTimer();
-          }
-        },
-        (error) => {
-          cleanup();
-          console.error('Error uploading post media:', error);
-
-          // Provide specific error messages
-          if ((error as any).code === 'storage/unauthorized') {
-            reject(new Error('Upload unauthorized. Please check your permissions.'));
-          } else if ((error as any).code === 'storage/canceled') {
-            reject(new Error('Upload was cancelled.'));
-          } else if ((error as any).code === 'storage/quota-exceeded') {
-            reject(new Error('Storage quota exceeded. Please try again later.'));
-          } else {
-            reject(new Error('Upload failed. Please try again.'));
-          }
-        },
-        async () => {
-          try {
-            cleanup();
-            const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
-            resolve(downloadURL);
-          } catch (error) {
-            cleanup();
-            reject(error);
-          }
-        }
-      );
-    });
+    const storageRef = ref(storage, `posts/${userId}/${fileName}`);
+    
+    const snapshot = await uploadBytes(storageRef, file);
+    const downloadURL = await getDownloadURL(snapshot.ref);
+    
+    return downloadURL;
   } catch (error) {
     console.error('Error uploading post media:', error);
     throw error;
@@ -126,26 +51,15 @@ export const createPost = async (
   mediaType: 'image' | 'video'
 ): Promise<string> => {
   try {
-    // Get user profile for denormalization
-    const { getUserProfile } = await import('./userService');
-    const userProfile = await getUserProfile(userId);
-    
     const postsRef = collection(db, 'posts');
     const docRef = await addDoc(postsRef, {
       userId,
       caption,
-      mediaURL, // legacy field for backward compatibility
-      mediaUrl: mediaURL, // required by security rules
+      mediaURL,
       mediaType,
       timestamp: serverTimestamp(),
       likes: 0,
-      likedBy: [],
-      // Denormalized user data
-      user: {
-        username: userProfile?.username || 'unknown',
-        displayName: userProfile?.displayName || 'Unknown User',
-        avatar: userProfile?.avatar || '/placeholder.svg'
-      }
+      likedBy: []
     });
     return docRef.id;
   } catch (error) {
@@ -182,7 +96,7 @@ export const uploadStoryMedia = async (file: File, userId: string, storyId: stri
   try {
     const fileExtension = file.name.split('.').pop();
     const fileName = `${storyId}.${fileExtension}`;
-    const storageRef = ref(storage, `stories/${storyId}/${fileName}`);
+    const storageRef = ref(storage, `stories/${userId}/${fileName}`);
     
     const snapshot = await uploadBytes(storageRef, file);
     const downloadURL = await getDownloadURL(snapshot.ref);
@@ -220,7 +134,7 @@ export const uploadReelMedia = async (file: File, userId: string, reelId?: strin
   try {
     const fileExtension = file.name.split('.').pop();
     const fileName = reelId ? `${reelId}.${fileExtension}` : `${Date.now()}.${fileExtension}`;
-    const storageRef = ref(storage, `reels/${reelId || Date.now()}/${fileName}`);
+    const storageRef = ref(storage, `reels/${userId}/${fileName}`);
     
     const snapshot = await uploadBytes(storageRef, file);
     const downloadURL = await getDownloadURL(snapshot.ref);

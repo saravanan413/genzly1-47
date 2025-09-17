@@ -1,8 +1,7 @@
 
 import { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { sendChatMessage, createChatId } from '../services/chat/chatService';
-import { uploadChatMedia } from '../services/mediaService';
+import { sendChatMessage } from '../services/chat/chatService';
 import { logger } from '../utils/logger';
 
 interface MediaUpload {
@@ -55,20 +54,12 @@ export const useChatActions = (targetUserId: string) => {
     setIsSending(true);
 
     try {
-      // Upload media to Firebase Storage first if a File is provided
-      let mediaURL = media.url;
-      if (media.file) {
-        const chatId = createChatId(currentUser.uid, targetUserId);
-        const provisionalId = `${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
-        mediaURL = await uploadChatMedia(media.file, chatId, provisionalId);
-      }
-
       const messageId = await sendChatMessage(
         currentUser.uid, 
         targetUserId, 
         media.name, 
         media.type === 'audio' ? 'voice' : media.type as 'text' | 'voice' | 'image' | 'video',
-        mediaURL
+        media.url
       );
 
       logger.debug('Media sent successfully:', messageId);

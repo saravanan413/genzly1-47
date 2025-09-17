@@ -7,17 +7,26 @@ import ShareModal from '../components/ShareModal';
 import FeedPost from '../components/feed/FeedPost';
 import FeedLoadingSkeletons from '../components/feed/FeedLoadingSkeletons';
 import PullToRefresh from '../components/feed/PullToRefresh';
-import { useFeedPostEnhanced } from '../hooks/useFeedPostEnhanced';
+import { useIntersectionObserver } from '../hooks/useIntersectionObserver';
+import { useFeedData } from '../hooks/useFeedData';
 import { usePullToRefresh } from '../hooks/usePullToRefresh';
+import { Post } from '../types/index';
 
 const Index = () => {
   const [selectedPostForComments, setSelectedPostForComments] = useState<string | null>(null);
   const [selectedPostForShare, setSelectedPostForShare] = useState<string | null>(null);
 
-  // Use enhanced feed hook that handles user data properly
-  const { posts, loading, error } = useFeedPostEnhanced();
+  const {
+    posts,
+    loading,
+    hasMore,
+    loadMorePosts,
+    handleRefresh,
+    handleLike,
+    handleFollow,
+    handleDoubleClick
+  } = useFeedData();
 
-  // Keep existing pull to refresh functionality
   const {
     containerRef,
     refreshing,
@@ -25,20 +34,13 @@ const Index = () => {
     handleTouchStart,
     handleTouchMove,
     handleTouchEnd
-  } = usePullToRefresh(() => window.location.reload());
+  } = usePullToRefresh(handleRefresh);
 
-  // Simple handler functions for feed post interactions
-  const handleLike = (postId: string) => {
-    console.log('Liking post:', postId);
-  };
-
-  const handleFollow = (userId: string) => {
-    console.log('Following user:', userId);
-  };
-
-  const handleDoubleClick = (postId: string) => {
-    console.log('Double clicked post:', postId);
-  };
+  const { targetRef } = useIntersectionObserver({
+    hasMore,
+    loading,
+    onLoadMore: loadMorePosts
+  });
 
   const handleCommentClick = (postId: string) => {
     setSelectedPostForComments(postId);
@@ -46,6 +48,14 @@ const Index = () => {
 
   const handleShareClick = (postId: string) => {
     setSelectedPostForShare(postId);
+  };
+
+  // Convert Post to the format expected by FeedPost component
+  const convertPostForFeedPost = (post: Post) => {
+    return {
+      ...post,
+      likes: post.likeCount || 0 // Convert likes array to count for FeedPost component
+    };
   };
 
   return (
@@ -72,7 +82,7 @@ const Index = () => {
                 posts.map((post) => (
                   <FeedPost
                     key={post.id}
-                    post={post as any}
+                    post={convertPostForFeedPost(post) as any}
                     onLike={handleLike}
                     onFollow={handleFollow}
                     onDoubleClick={handleDoubleClick}
@@ -90,13 +100,21 @@ const Index = () => {
                 </div>
               ) : null}
 
+              {/* Intersection Observer Target */}
+              {hasMore && posts.length > 0 && (
+                <div ref={targetRef} className="h-10 flex items-center justify-center">
+                  {loading && (
+                    <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                  )}
+                </div>
+              )}
+
               {/* Loading skeleton */}
               {loading && posts.length === 0 && <FeedLoadingSkeletons />}
 
-              {/* Error state */}
-              {error && (
+              {!hasMore && posts.length > 0 && (
                 <div className="text-center py-8">
-                  <p className="text-red-500">Error loading posts: {error}</p>
+                  <p className="text-muted-foreground dark:text-muted-foreground">You've reached the end!</p>
                 </div>
               )}
             </div>

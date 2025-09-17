@@ -68,7 +68,7 @@ const UserPostsGrid: React.FC<UserPostsGridProps> = ({
               type="button"
               onClick={e => {
                 e.stopPropagation();
-                onCommentClick?.(parseInt(post.id) || 0);
+                onCommentClick(parseInt(post.id));
               }}
             >
               <MessageSquare className="text-white" size={18} />

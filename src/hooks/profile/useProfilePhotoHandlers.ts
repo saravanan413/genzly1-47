@@ -32,8 +32,15 @@ export const useProfilePhotoHandlers = () => {
       return;
     }
     
-    
-    
+    // Increased file size limit to 10MB
+    if (file.size > 10 * 1024 * 1024) {
+      toast({
+        title: "File too large",
+        description: "Image must be less than 10MB",
+        variant: "destructive"
+      });
+      return;
+    }
     
     const reader = new FileReader();
     reader.onload = (event) => {
@@ -90,21 +97,59 @@ export const useProfilePhotoHandlers = () => {
       const blob = await response.blob();
       console.log('Original blob created, size:', blob.size, 'type:', blob.type);
       
-      // Use the cropped image as-is without additional compression or resizing
+      // Simple compression - only if blob is larger than 2MB
       let finalBlob = blob;
+      if (blob.size > 2 * 1024 * 1024) {
+        console.log('Compressing image...');
+        try {
+          const canvas = document.createElement('canvas');
+          const ctx = canvas.getContext('2d');
+          const img = new Image();
+          
+          await new Promise<void>((resolve, reject) => {
+            img.onload = () => resolve();
+            img.onerror = () => reject(new Error('Failed to load image for compression'));
+            img.src = croppedImage;
+          });
+          
+          // Resize to max 400x400 for profile pictures to reduce size
+          const maxSize = 400;
+          const scale = Math.min(maxSize / img.width, maxSize / img.height, 1);
+          canvas.width = img.width * scale;
+          canvas.height = img.height * scale;
+          
+          if (ctx) {
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+            
+            finalBlob = await new Promise<Blob>((resolve, reject) => {
+              canvas.toBlob((blob) => {
+                if (blob) {
+                  resolve(blob);
+                } else {
+                  reject(new Error('Failed to compress image'));
+                }
+              }, 'image/jpeg', 0.8);
+            });
+            
+            console.log('Compressed blob size:', finalBlob.size);
+          }
+        } catch (compressionError) {
+          console.warn('Image compression failed, using original:', compressionError);
+          // Continue with original blob if compression fails
+        }
+      }
       
-      // Create unique filename
+      // Create unique filename with userId for better security matching
       const timestamp = Date.now();
-      const ext = (finalBlob.type.split('/')?.[1] || 'jpeg').split(';')[0];
-      const fileName = `profile_${timestamp}.${ext}`;
+      const fileName = `${currentUser.uid}_profile_${timestamp}.jpg`;
       
       console.log('Creating storage reference...');
-      // Updated path to match storage rules: /profilePictures/{userId}/{fileName}
-      const storageRef = ref(storage, `profilePictures/${currentUser.uid}/${fileName}`);
+      // Updated path to match storage rules better
+      const storageRef = ref(storage, `profilePictures/${currentUser.uid}_profile_${timestamp}.jpg`);
       
       console.log('Starting upload to Firebase Storage...');
       const snapshot = await uploadBytes(storageRef, finalBlob, {
-        contentType: finalBlob.type || 'image/jpeg',
+        contentType: 'image/jpeg',
         customMetadata: {
           userId: currentUser.uid,
           uploadedAt: new Date().toISOString()
@@ -115,11 +160,10 @@ export const useProfilePhotoHandlers = () => {
       const downloadURL = await getDownloadURL(snapshot.ref);
       console.log('Download URL obtained:', downloadURL);
       
-      // Update user document in Firestore with photoURL for compatibility
+      console.log('Updating user document in Firestore...');
       const userDocRef = doc(db, 'users', currentUser.uid);
       await updateDoc(userDocRef, {
         avatar: downloadURL,
-        photoURL: downloadURL, // Also update photoURL for compatibility
         updatedAt: new Date()
       });
       
@@ -186,11 +230,9 @@ export const useProfilePhotoHandlers = () => {
     setUploading(true);
     
     try {
-      // Clear both avatar and photoURL fields
       const userDocRef = doc(db, 'users', currentUser.uid);
       await updateDoc(userDocRef, {
         avatar: '',
-        photoURL: '', // Also clear photoURL for compatibility
         updatedAt: new Date()
       });
       

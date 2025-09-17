@@ -1,15 +1,14 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { uploadPostMedia, createPostSkeleton, updatePostWithMedia } from '../services/mediaService';
 import { shareMediaToChats } from '../services/chat/shareService';
 import { useToast } from '@/hooks/use-toast';
 import { logger } from '../utils/logger';
-import { useUploadQueue } from '../hooks/useUploadQueue';
 import CameraInterface from '../components/camera/CameraInterface';
 import MediaPreview from '../components/camera/MediaPreview';
 import ShareToFollowers from '../components/camera/ShareToFollowers';
 import GalleryPicker from '../components/camera/GalleryPicker';
-import UploadProgressIndicator from '../components/upload/UploadProgressIndicator';
 
 type ViewMode = 'camera' | 'gallery' | 'preview' | 'share';
 
@@ -20,7 +19,6 @@ const CreatePost = () => {
   const navigate = useNavigate();
   const { currentUser } = useAuth();
   const { toast } = useToast();
-  const { tasks, addUpload, retryUpload, cancelUpload } = useUploadQueue();
 
   const handleMediaCaptured = (media: {type: 'image' | 'video', data: string, file: File}) => {
     setSelectedMedia(media);
@@ -47,10 +45,6 @@ const CreatePost = () => {
 
   const handleBackToPreview = () => {
     setViewMode('preview');
-  };
-
-  const handleUpdateMedia = (updatedMedia: {type: 'image' | 'video', data: string, file: File}) => {
-    setSelectedMedia(updatedMedia);
   };
 
   const handleShareToUsers = async (selectedUsers: string[], caption: string) => {
@@ -85,7 +79,50 @@ const CreatePost = () => {
     }
   };
 
-  // Remove the old compression function as it's now handled by the upload queue
+  const compressImage = async (file: File): Promise<File> => {
+    return new Promise((resolve) => {
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      const img = new Image();
+      
+      img.onload = () => {
+        // Calculate new dimensions (max 1080px)
+        const maxSize = 1080;
+        let { width, height } = img;
+        
+        if (width > height) {
+          if (width > maxSize) {
+            height = (height * maxSize) / width;
+            width = maxSize;
+          }
+        } else {
+          if (height > maxSize) {
+            width = (width * maxSize) / height;
+            height = maxSize;
+          }
+        }
+        
+        canvas.width = width;
+        canvas.height = height;
+        
+        ctx?.drawImage(img, 0, 0, width, height);
+        
+        canvas.toBlob((blob) => {
+          if (blob) {
+            const compressedFile = new File([blob], file.name, {
+              type: 'image/jpeg',
+              lastModified: Date.now()
+            });
+            resolve(compressedFile);
+          } else {
+            resolve(file);
+          }
+        }, 'image/jpeg', 0.8);
+      };
+      
+      img.src = URL.createObjectURL(file);
+    });
+  };
 
   const handlePost = async (caption: string) => {
     if (!selectedMedia || !currentUser) return;
@@ -93,48 +130,33 @@ const CreatePost = () => {
     setLoading(true);
     
     try {
-      // Check if it's a video - treat videos as reels
-      if (selectedMedia.type === 'video') {
-        const { createReelSkeleton, uploadReelVideo, updateReelWithMedia } = await import('../services/reelService');
-        
-        // Create reel skeleton first
-        const reelId = await createReelSkeleton(currentUser.uid, caption);
-        
-        // Upload video to correct path
-        const videoURL = await uploadReelVideo(
-          selectedMedia.file,
-          currentUser.uid,
-          reelId,
-          (progress) => {
-            logger.info('Reel upload progress', { progress });
-          }
-        );
-        
-        // Update reel with video URL
-        await updateReelWithMedia(reelId, videoURL);
-        
-        toast({
-          title: "Reel uploaded!",
-          description: "Your reel has been posted successfully."
-        });
-      } else {
-        // Handle images as regular posts
-        await addUpload(currentUser.uid, selectedMedia.file, caption, selectedMedia.type);
-        
-        toast({
-          title: "Post uploading!",
-          description: "Your post is uploading in the background."
-        });
+      // Compress media if it's an image
+      let fileToUpload = selectedMedia.file;
+      if (selectedMedia.type === 'image') {
+        fileToUpload = await compressImage(selectedMedia.file);
       }
       
-      // Navigate back to home immediately
+      // Create post skeleton first
+      const postId = await createPostSkeleton(currentUser.uid, caption, selectedMedia.type);
+      
+      // Upload media to Firebase Storage
+      const mediaURL = await uploadPostMedia(fileToUpload, currentUser.uid, postId);
+      
+      // Update post with media URL
+      await updatePostWithMedia(postId, mediaURL);
+      
+      toast({
+        title: "Success!",
+        description: `${selectedMedia.type === 'image' ? 'Post' : 'Reel'} shared successfully!`
+      });
+      
+      // Navigate back to home
       navigate('/');
     } catch (error) {
       logger.error('Error posting content:', error);
-      const errorMessage = error instanceof Error ? error.message : "Failed to upload. Please try again.";
       toast({
         title: "Error",
-        description: errorMessage,
+        description: "Failed to share content. Please try again.",
         variant: "destructive"
       });
     } finally {
@@ -178,7 +200,6 @@ const CreatePost = () => {
           onBack={handleBackToCamera}
           onPost={handlePost}
           onShareToFollowers={handleShareToFollowers}
-          onUpdateMedia={handleUpdateMedia}
           loading={loading}
         />
       ) : null;
@@ -194,16 +215,7 @@ const CreatePost = () => {
       ) : null;
     
     default:
-      return (
-        <>
-          <UploadProgressIndicator
-            tasks={tasks}
-            onRetry={retryUpload}
-            onCancel={cancelUpload}
-          />
-          {null}
-        </>
-      );
+      return null;
   }
 };
 

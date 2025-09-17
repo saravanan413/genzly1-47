@@ -1,7 +1,5 @@
 
 import { Toaster } from "@/components/ui/toaster";
-import UploadProgressIndicator from "@/components/upload/UploadProgressIndicator";
-import { useUploadQueue } from "@/hooks/useUploadQueue";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -36,7 +34,6 @@ const queryClient = new QueryClient();
 
 const AppContent = () => {
   const { currentUser, loading } = useAuth();
-  const { tasks, retryUpload, cancelUpload } = useUploadQueue();
 
   useEffect(() => {
     if (currentUser) {
@@ -61,35 +58,28 @@ const AppContent = () => {
   }
 
   return (
-    <>
-      <Routes>
-        <Route path="/" element={<Index />} />
-        <Route path="/explore" element={<Explore />} />
-        <Route path="/create" element={<CreatePost />} />
-        <Route path="/reels" element={<Reels />} />
-        <Route path="/chat" element={<Chat />} />
-        <Route path="/chat/:userId" element={<IndividualChat />} />
-        <Route path="/profile" element={<Profile />} />
-        <Route path="/edit-profile" element={<EditProfile />} />
-        <Route path="/settings" element={<Settings />} />
-        <Route path="/settings/language" element={<LanguageSettings />} />
-        <Route path="/liked-posts" element={<LikedPosts />} />
-        {/* New settings sub-pages */}
-        <Route path="/liked" element={<LikedPostsReels />} />
-        <Route path="/archive" element={<Archive />} />
-        <Route path="/blocked" element={<BlockedUsers />} />
-        <Route path="/mystories" element={<MyStories />} />
-        <Route path="/add-story" element={<AddStory />} />
-        <Route path="/story/:userIndex/:storyIndex" element={<StoryViewerPage />} />
-        <Route path="/user/:userId" element={<UserProfile />} />
-        <Route path="*" element={<NotFound />} />
-      </Routes>
-      <UploadProgressIndicator
-        tasks={tasks}
-        onRetry={retryUpload}
-        onCancel={cancelUpload}
-      />
-    </>
+    <Routes>
+      <Route path="/" element={<Index />} />
+      <Route path="/explore" element={<Explore />} />
+      <Route path="/create" element={<CreatePost />} />
+      <Route path="/reels" element={<Reels />} />
+      <Route path="/chat" element={<Chat />} />
+      <Route path="/chat/:userId" element={<IndividualChat />} />
+      <Route path="/profile" element={<Profile />} />
+      <Route path="/edit-profile" element={<EditProfile />} />
+      <Route path="/settings" element={<Settings />} />
+      <Route path="/settings/language" element={<LanguageSettings />} />
+      <Route path="/liked-posts" element={<LikedPosts />} />
+      {/* New settings sub-pages */}
+      <Route path="/liked" element={<LikedPostsReels />} />
+      <Route path="/archive" element={<Archive />} />
+      <Route path="/blocked" element={<BlockedUsers />} />
+      <Route path="/mystories" element={<MyStories />} />
+      <Route path="/add-story" element={<AddStory />} />
+      <Route path="/story/:userIndex/:storyIndex" element={<StoryViewerPage />} />
+      <Route path="/user/:userId" element={<UserProfile />} />
+      <Route path="*" element={<NotFound />} />
+    </Routes>
   );
 };
 

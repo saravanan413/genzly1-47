@@ -121,7 +121,7 @@ const AddStory = () => {
           const file = new File([blob], 'story-image.jpg', { type: 'image/jpeg' });
           setSelectedFile({ type: 'image', data: croppedImage, file });
         }
-      });
+      }, 'image/jpeg', 1.0);
     };
     img.src = croppedImage;
     

@@ -49,6 +49,10 @@ const CreatePost = () => {
     setViewMode('preview');
   };
 
+  const handleUpdateMedia = (updatedMedia: {type: 'image' | 'video', data: string, file: File}) => {
+    setSelectedMedia(updatedMedia);
+  };
+
   const handleShareToUsers = async (selectedUsers: string[], caption: string) => {
     if (!selectedMedia || !currentUser) return;
     
@@ -167,6 +171,7 @@ const CreatePost = () => {
           onBack={handleBackToCamera}
           onPost={handlePost}
           onShareToFollowers={handleShareToFollowers}
+          onUpdateMedia={handleUpdateMedia}
           loading={loading}
         />
       ) : null;

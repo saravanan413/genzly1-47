@@ -9,8 +9,9 @@ import CameraInterface from '../components/camera/CameraInterface';
 import MediaPreview from '../components/camera/MediaPreview';
 import ShareToFollowers from '../components/camera/ShareToFollowers';
 import GalleryPicker from '../components/camera/GalleryPicker';
+import MediaEditor from '../components/camera/MediaEditor';
 
-type ViewMode = 'camera' | 'gallery' | 'preview' | 'share';
+type ViewMode = 'camera' | 'gallery' | 'edit' | 'preview' | 'share';
 
 const CreatePost = () => {
   const [viewMode, setViewMode] = useState<ViewMode>('camera');
@@ -31,7 +32,7 @@ const CreatePost = () => {
 
   const handleGalleryMediaSelected = (media: {type: 'image' | 'video', data: string, file: File}) => {
     setSelectedMedia(media);
-    setViewMode('preview');
+    setViewMode('edit');
   };
 
   const handleBackToCamera = () => {
@@ -41,6 +42,15 @@ const CreatePost = () => {
 
   const handleShareToFollowers = () => {
     setViewMode('share');
+  };
+
+  const handleEditComplete = (editedMedia: {type: 'image' | 'video', data: string, file: File}) => {
+    setSelectedMedia(editedMedia);
+    setViewMode('preview');
+  };
+
+  const handleBackToEdit = () => {
+    setViewMode('edit');
   };
 
   const handleBackToPreview = () => {
@@ -193,11 +203,20 @@ const CreatePost = () => {
         />
       );
     
+    case 'edit':
+      return selectedMedia ? (
+        <MediaEditor
+          media={selectedMedia}
+          onBack={handleBackToCamera}
+          onEditComplete={handleEditComplete}
+        />
+      ) : null;
+    
     case 'preview':
       return selectedMedia ? (
         <MediaPreview
           media={selectedMedia}
-          onBack={handleBackToCamera}
+          onBack={handleBackToEdit}
           onPost={handlePost}
           onShareToFollowers={handleShareToFollowers}
           loading={loading}

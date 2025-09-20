@@ -1,7 +1,8 @@
 import { 
   collection, 
   addDoc, 
-  serverTimestamp 
+  serverTimestamp,
+  doc
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '../config/firebase';
@@ -49,38 +50,44 @@ export const createReel = async (
   }
 };
 
-export const createReelSkeleton = async (userId: string, caption: string, music?: string): Promise<string> => {
+export const generateFirestoreId = (collectionName: string): string => {
+  return doc(collection(db, collectionName)).id;
+};
+
+export const createCompleteReel = async (
+  userId: string,
+  caption: string,
+  file: File,
+  settings: { allowComments: boolean; hideLikeCount: boolean } = { allowComments: true, hideLikeCount: false },
+  music?: string
+): Promise<string> => {
   try {
+    // Pre-generate reel ID
+    const reelId = generateFirestoreId('reels');
+    
+    // Upload video first using the pre-generated ID
+    const videoURL = await uploadReelVideo(file, reelId);
+    
+    // Create complete reel document with mediaURL already populated
     const reelsRef = collection(db, 'reels');
     const docRef = await addDoc(reelsRef, {
       userId,
-      mediaURL: '', // Will be updated after upload
-      videoURL: '', // Will be updated after upload
+      mediaURL: videoURL,
+      videoURL: videoURL,
       caption,
       music: music || 'Original Audio',
       mediaType: 'video',
       timestamp: serverTimestamp(),
       likeCount: 0,
       commentCount: 0,
-      shares: 0
+      shares: 0,
+      allowComments: settings.allowComments,
+      hideLikeCount: settings.hideLikeCount
     });
+    
     return docRef.id;
   } catch (error) {
-    console.error('Error creating reel skeleton:', error);
-    throw error;
-  }
-};
-
-export const updateReelWithMedia = async (reelId: string, videoURL: string): Promise<void> => {
-  try {
-    const { doc, updateDoc } = await import('firebase/firestore');
-    const reelRef = doc(db, 'reels', reelId);
-    await updateDoc(reelRef, { 
-      mediaURL: videoURL,
-      videoURL: videoURL 
-    });
-  } catch (error) {
-    console.error('Error updating reel with media:', error);
+    console.error('Error creating complete reel:', error);
     throw error;
   }
 };

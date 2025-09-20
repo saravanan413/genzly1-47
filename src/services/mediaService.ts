@@ -1,6 +1,6 @@
 
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp, doc } from 'firebase/firestore';
 import { storage, db } from '../config/firebase';
 
 export const uploadChatMedia = async (file: File, chatId: string, messageId: string): Promise<string> => {
@@ -146,33 +146,44 @@ export const uploadReelMedia = async (file: File, reelId: string): Promise<strin
   }
 };
 
-// Helper functions for create-first-then-upload pattern
-export const createPostSkeleton = async (userId: string, caption: string, mediaType: 'image' | 'video'): Promise<string> => {
+// Upload-first pattern functions
+export const generateFirestoreId = (collectionName: string): string => {
+  return doc(collection(db, collectionName)).id;
+};
+
+export const createCompletePost = async (
+  userId: string,
+  caption: string,
+  file: File,
+  mediaType: 'image' | 'video',
+  settings: { allowComments: boolean; hideLikeCount: boolean } = { allowComments: true, hideLikeCount: false }
+): Promise<string> => {
   try {
+    // Pre-generate post ID
+    const postId = generateFirestoreId('posts');
+    
+    // Upload media first using the pre-generated ID
+    const mediaURL = await uploadPostMedia(file, postId);
+    
+    // Create complete post document with mediaURL already populated
     const postsRef = collection(db, 'posts');
     const docRef = await addDoc(postsRef, {
       userId,
       caption,
-      mediaURL: '', // Will be updated after upload
+      mediaURL,
       mediaType,
       timestamp: serverTimestamp(),
       likes: 0,
-      likedBy: []
+      likedBy: [],
+      allowComments: settings.allowComments,
+      hideLikeCount: settings.hideLikeCount
     });
+    
     return docRef.id;
   } catch (error) {
-    console.error('Error creating post skeleton:', error);
-    throw error;
-  }
-};
-
-export const updatePostWithMedia = async (postId: string, mediaURL: string): Promise<void> => {
-  try {
-    const { doc, updateDoc } = await import('firebase/firestore');
-    const postRef = doc(db, 'posts', postId);
-    await updateDoc(postRef, { mediaURL });
-  } catch (error) {
-    console.error('Error updating post with media:', error);
+    console.error('Error creating complete post:', error);
+    // If Firestore creation fails after successful upload, we should clean up
+    // But for now, just throw the error
     throw error;
   }
 };

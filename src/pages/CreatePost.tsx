@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { uploadPostMedia, createPostSkeleton, updatePostWithMedia, uploadReelMedia } from '../services/mediaService';
+import { uploadPostMedia, createCompletePost, uploadReelMedia } from '../services/mediaService';
 import { shareMediaToChats } from '../services/chat/shareService';
 import { useToast } from '@/hooks/use-toast';
 import { logger } from '../utils/logger';
@@ -97,50 +97,6 @@ const CreatePost = () => {
     }
   };
 
-  const compressImage = async (file: File): Promise<File> => {
-    return new Promise((resolve) => {
-      const canvas = document.createElement('canvas');
-      const ctx = canvas.getContext('2d');
-      const img = new Image();
-      
-      img.onload = () => {
-        // Calculate new dimensions (max 1080px)
-        const maxSize = 1080;
-        let { width, height } = img;
-        
-        if (width > height) {
-          if (width > maxSize) {
-            height = (height * maxSize) / width;
-            width = maxSize;
-          }
-        } else {
-          if (height > maxSize) {
-            width = (width * maxSize) / height;
-            height = maxSize;
-          }
-        }
-        
-        canvas.width = width;
-        canvas.height = height;
-        
-        ctx?.drawImage(img, 0, 0, width, height);
-        
-        canvas.toBlob((blob) => {
-          if (blob) {
-            const compressedFile = new File([blob], file.name, {
-              type: 'image/jpeg',
-              lastModified: Date.now()
-            });
-            resolve(compressedFile);
-          } else {
-            resolve(file);
-          }
-        }, 'image/jpeg', 0.8);
-      };
-      
-      img.src = URL.createObjectURL(file);
-    });
-  };
 
   const handlePost = async (caption: string) => {
     if (!selectedMedia || !currentUser) return;
@@ -148,38 +104,30 @@ const CreatePost = () => {
     setLoading(true);
     
     try {
-      // Compress media if it's an image
-      let fileToUpload = selectedMedia.file;
       if (selectedMedia.type === 'image') {
-        fileToUpload = await compressImage(selectedMedia.file);
-      }
-      
-      if (selectedMedia.type === 'image') {
-        // Create post skeleton first
-        const postId = await createPostSkeleton(currentUser.uid, caption, selectedMedia.type);
-        
-        // Upload media to Firebase Storage using postId
-        const mediaURL = await uploadPostMedia(fileToUpload, postId);
-        
-        // Update post with media URL
-        await updatePostWithMedia(postId, mediaURL);
+        // Upload-first approach: Upload media then create complete post
+        await createCompletePost(
+          currentUser.uid, 
+          caption, 
+          selectedMedia.file, 
+          selectedMedia.type,
+          (selectedMedia as any).settings || { allowComments: true, hideLikeCount: false }
+        );
         
         toast({
           title: "Success!",
           description: "Post shared successfully!"
         });
       } else {
-        // For videos, create reel
-        const { createReelSkeleton, updateReelWithMedia } = await import('../services/reelService');
+        // For videos, create complete reel
+        const { createCompleteReel } = await import('../services/reelService');
         
-        // Create reel skeleton first
-        const reelId = await createReelSkeleton(currentUser.uid, caption);
-        
-        // Upload video using reelId
-        const videoURL = await uploadReelMedia(fileToUpload, reelId);
-        
-        // Update reel with media URL
-        await updateReelWithMedia(reelId, videoURL);
+        await createCompleteReel(
+          currentUser.uid, 
+          caption, 
+          selectedMedia.file,
+          (selectedMedia as any).settings || { allowComments: true, hideLikeCount: false }
+        );
         
         toast({
           title: "Success!",

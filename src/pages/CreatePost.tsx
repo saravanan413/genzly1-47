@@ -44,7 +44,15 @@ const CreatePost = () => {
     setViewMode('share');
   };
 
-  const handleEditComplete = (editedMedia: {type: 'image' | 'video', data: string, file: File}) => {
+  const handleEditComplete = (editedMedia: {
+    type: 'image' | 'video', 
+    data: string, 
+    file: File,
+    settings: {
+      allowComments: boolean;
+      hideLikeCount: boolean;
+    }
+  }) => {
     setSelectedMedia(editedMedia);
     setViewMode('preview');
   };

@@ -73,7 +73,7 @@ const AddStory = () => {
         const storyId = await createStorySkeleton(currentUser.uid, selectedFile.type);
         
         // Upload media story
-        const mediaURL = await uploadStoryMedia(selectedFile.file, currentUser.uid, storyId);
+        const mediaURL = await uploadStoryMedia(selectedFile.file, storyId);
         
         // Update story with media URL
         await updateStoryWithMedia(storyId, mediaURL);

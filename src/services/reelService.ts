@@ -6,11 +6,11 @@ import {
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '../config/firebase';
 
-export const uploadReelVideo = async (file: File, userId: string, reelId: string): Promise<string> => {
+export const uploadReelVideo = async (file: File, reelId: string): Promise<string> => {
   try {
     const fileExtension = file.name.split('.').pop();
     const fileName = `${reelId}.${fileExtension}`;
-    const storageRef = ref(storage, `reels/${userId}/${fileName}`);
+    const storageRef = ref(storage, `reels/${reelId}/${fileName}`);
     
     const snapshot = await uploadBytes(storageRef, file);
     const downloadURL = await getDownloadURL(snapshot.ref);

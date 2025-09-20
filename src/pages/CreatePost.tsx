@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { uploadPostMedia, createPostSkeleton, updatePostWithMedia } from '../services/mediaService';
+import { uploadPostMedia, createPostSkeleton, updatePostWithMedia, uploadReelMedia } from '../services/mediaService';
 import { shareMediaToChats } from '../services/chat/shareService';
 import { useToast } from '@/hooks/use-toast';
 import { logger } from '../utils/logger';
@@ -154,19 +154,38 @@ const CreatePost = () => {
         fileToUpload = await compressImage(selectedMedia.file);
       }
       
-      // Create post skeleton first
-      const postId = await createPostSkeleton(currentUser.uid, caption, selectedMedia.type);
-      
-      // Upload media to Firebase Storage
-      const mediaURL = await uploadPostMedia(fileToUpload, currentUser.uid, postId);
-      
-      // Update post with media URL
-      await updatePostWithMedia(postId, mediaURL);
-      
-      toast({
-        title: "Success!",
-        description: `${selectedMedia.type === 'image' ? 'Post' : 'Reel'} shared successfully!`
-      });
+      if (selectedMedia.type === 'image') {
+        // Create post skeleton first
+        const postId = await createPostSkeleton(currentUser.uid, caption, selectedMedia.type);
+        
+        // Upload media to Firebase Storage using postId
+        const mediaURL = await uploadPostMedia(fileToUpload, postId);
+        
+        // Update post with media URL
+        await updatePostWithMedia(postId, mediaURL);
+        
+        toast({
+          title: "Success!",
+          description: "Post shared successfully!"
+        });
+      } else {
+        // For videos, create reel
+        const { createReelSkeleton, updateReelWithMedia } = await import('../services/reelService');
+        
+        // Create reel skeleton first
+        const reelId = await createReelSkeleton(currentUser.uid, caption);
+        
+        // Upload video using reelId
+        const videoURL = await uploadReelMedia(fileToUpload, reelId);
+        
+        // Update reel with media URL
+        await updateReelWithMedia(reelId, videoURL);
+        
+        toast({
+          title: "Success!",
+          description: "Reel shared successfully!"
+        });
+      }
       
       // Navigate back to home
       navigate('/');

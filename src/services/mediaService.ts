@@ -28,11 +28,11 @@ export const uploadChatMedia = async (file: File, chatId: string, messageId: str
   }
 };
 
-export const uploadPostMedia = async (file: File, userId: string, postId: string): Promise<string> => {
+export const uploadPostMedia = async (file: File, postId: string): Promise<string> => {
   try {
     const fileExtension = file.name.split('.').pop();
     const fileName = `${postId}.${fileExtension}`;
-    const storageRef = ref(storage, `posts/${userId}/${fileName}`);
+    const storageRef = ref(storage, `posts/${postId}/${fileName}`);
     
     const snapshot = await uploadBytes(storageRef, file);
     const downloadURL = await getDownloadURL(snapshot.ref);
@@ -92,11 +92,11 @@ export const uploadProfilePicture = async (file: File, userId: string): Promise<
   }
 };
 
-export const uploadStoryMedia = async (file: File, userId: string, storyId: string): Promise<string> => {
+export const uploadStoryMedia = async (file: File, storyId: string): Promise<string> => {
   try {
     const fileExtension = file.name.split('.').pop();
     const fileName = `${storyId}.${fileExtension}`;
-    const storageRef = ref(storage, `stories/${userId}/${fileName}`);
+    const storageRef = ref(storage, `stories/${storyId}/${fileName}`);
     
     const snapshot = await uploadBytes(storageRef, file);
     const downloadURL = await getDownloadURL(snapshot.ref);
@@ -130,11 +130,11 @@ export const createStory = async (
   }
 };
 
-export const uploadReelMedia = async (file: File, userId: string, reelId?: string): Promise<string> => {
+export const uploadReelMedia = async (file: File, reelId: string): Promise<string> => {
   try {
     const fileExtension = file.name.split('.').pop();
-    const fileName = reelId ? `${reelId}.${fileExtension}` : `${Date.now()}.${fileExtension}`;
-    const storageRef = ref(storage, `reels/${userId}/${fileName}`);
+    const fileName = `${reelId}.${fileExtension}`;
+    const storageRef = ref(storage, `reels/${reelId}/${fileName}`);
     
     const snapshot = await uploadBytes(storageRef, file);
     const downloadURL = await getDownloadURL(snapshot.ref);

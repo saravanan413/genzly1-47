@@ -2,7 +2,7 @@
 import { useState, ChangeEvent } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import { doc, updateDoc } from 'firebase/firestore';
 import { storage, db } from '../../config/firebase';
 
@@ -13,6 +13,8 @@ export const useProfilePhotoHandlers = () => {
   const [uploading, setUploading] = useState(false);
   const [showCrop, setShowCrop] = useState(false);
   const [cropImageData, setCropImageData] = useState<string | null>(null);
+  const [pendingBlob, setPendingBlob] = useState<Blob | null>(null);
+  const [uploadProgress, setUploadProgress] = useState<number>(0);
 
   // Handle profile photo selection with better error handling
   const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
@@ -64,153 +66,151 @@ export const useProfilePhotoHandlers = () => {
   };
 
   const handleCropDone = async (croppedImage: string, onImageUpdate: (url: string) => void) => {
-    if (!currentUser?.uid) {
-      toast({
-        title: "Authentication required",
-        description: "You must be logged in to upload a profile picture",
-        variant: "destructive"
-      });
-      return;
-    }
-    
-    console.log('Starting profile picture upload for user:', currentUser.uid);
-    setUploading(true);
-    
-    const uploadTimeout = setTimeout(() => {
-      setUploading(false);
-      toast({
-        title: "Upload timeout",
-        description: "Upload is taking too long. Please try again with a smaller image.",
-        variant: "destructive"
-      });
-    }, 30000); // 30 second timeout
-    
+    // Prepare preview and pending blob; upload happens on Save
     try {
-      console.log('Converting cropped image to blob...');
-      
-      // Convert base64 to blob with simplified approach
+      console.log('Preparing cropped image for preview...');
       const response = await fetch(croppedImage);
-      if (!response.ok) {
-        throw new Error('Failed to process cropped image');
-      }
-      
+      if (!response.ok) throw new Error('Failed to process cropped image');
+
       const blob = await response.blob();
       console.log('Original blob created, size:', blob.size, 'type:', blob.type);
-      
-      // Simple compression - only if blob is larger than 2MB
+
       let finalBlob = blob;
       if (blob.size > 2 * 1024 * 1024) {
-        console.log('Compressing image...');
+        console.log('Compressing image for preview...');
         try {
           const canvas = document.createElement('canvas');
           const ctx = canvas.getContext('2d');
           const img = new Image();
-          
           await new Promise<void>((resolve, reject) => {
             img.onload = () => resolve();
             img.onerror = () => reject(new Error('Failed to load image for compression'));
             img.src = croppedImage;
           });
-          
-          // Resize to max 400x400 for profile pictures to reduce size
           const maxSize = 400;
           const scale = Math.min(maxSize / img.width, maxSize / img.height, 1);
           canvas.width = img.width * scale;
           canvas.height = img.height * scale;
-          
           if (ctx) {
             ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-            
             finalBlob = await new Promise<Blob>((resolve, reject) => {
-              canvas.toBlob((blob) => {
-                if (blob) {
-                  resolve(blob);
-                } else {
-                  reject(new Error('Failed to compress image'));
-                }
-              }, 'image/jpeg', 0.8);
+              canvas.toBlob((b) => {
+                if (b) resolve(b);
+                else reject(new Error('Failed to compress image'));
+              }, 'image/jpeg', 0.85);
             });
-            
             console.log('Compressed blob size:', finalBlob.size);
           }
         } catch (compressionError) {
           console.warn('Image compression failed, using original:', compressionError);
-          // Continue with original blob if compression fails
         }
       }
-      
-      // Create unique filename with userId for better security matching
+
+      // Set pending upload blob and show preview immediately
+      setPendingBlob(finalBlob);
+      const previewUrl = URL.createObjectURL(finalBlob);
+      onImageUpdate(previewUrl);
+      setShowCrop(false);
+      setCropImageData(null);
+      toast({ title: 'Ready to save', description: 'Press Save to upload your new profile photo' });
+    } catch (error) {
+      console.error('Error preparing cropped image:', error);
+      toast({
+        title: 'Error',
+        description: 'Could not process the image. Please try again.',
+        variant: 'destructive'
+      });
+    }
+  };
+
+  const commitUpload = async (onImageUpdate: (url: string) => void): Promise<string | null> => {
+    if (!pendingBlob) {
+      return null; // nothing to upload
+    }
+    if (!currentUser?.uid) {
+      toast({
+        title: 'Authentication required',
+        description: 'You must be logged in to upload a profile picture',
+        variant: 'destructive'
+      });
+      return null;
+    }
+
+    console.log('Starting profile picture upload for user:', currentUser.uid);
+    setUploading(true);
+    setUploadProgress(0);
+
+    const uploadTimeout = setTimeout(() => {
+      console.warn('Upload timeout reached');
+      toast({
+        title: 'Upload timeout',
+        description: 'Upload is taking too long. Please try again.',
+        variant: 'destructive'
+      });
+    }, 120000); // 2 minutes
+
+    try {
       const timestamp = Date.now();
       const fileName = `profile_${timestamp}.jpg`;
-      
-      console.log('Creating storage reference...');
-      // Updated path to match storage rules: profilePictures/{userId}/{fileName}
       const storageRef = ref(storage, `profilePictures/${currentUser.uid}/${fileName}`);
-      
-      console.log('Starting upload to Firebase Storage...');
-      const snapshot = await uploadBytes(storageRef, finalBlob, {
+
+      const task = uploadBytesResumable(storageRef, pendingBlob, {
         contentType: 'image/jpeg',
         customMetadata: {
           userId: currentUser.uid,
           uploadedAt: new Date().toISOString()
         }
       });
-      
-      console.log('Upload completed, getting download URL...');
-      const downloadURL = await getDownloadURL(snapshot.ref);
-      console.log('Download URL obtained:', downloadURL);
-      
+
+      const downloadURL: string = await new Promise((resolve, reject) => {
+        task.on(
+          'state_changed',
+          (snapshot) => {
+            const prog = Math.round((snapshot.bytesTransferred / snapshot.totalBytes) * 100);
+            setUploadProgress(prog);
+          },
+          (err) => reject(err),
+          async () => {
+            try {
+              const url = await getDownloadURL(task.snapshot.ref);
+              resolve(url);
+            } catch (e) {
+              reject(e);
+            }
+          }
+        );
+      });
+
       console.log('Updating user document in Firestore...');
       const userDocRef = doc(db, 'users', currentUser.uid);
-      await updateDoc(userDocRef, {
-        avatar: downloadURL,
-        updatedAt: new Date()
-      });
-      
-      console.log('Profile update completed successfully');
-      
-      // Clear timeout since upload succeeded
+      await updateDoc(userDocRef, { avatar: downloadURL, updatedAt: new Date() });
+
       clearTimeout(uploadTimeout);
-      
-      // Update UI state
+
       onImageUpdate(downloadURL);
-      setShowCrop(false);
-      setCropImageData(null);
-      
-      toast({
-        title: "Success!",
-        description: "Profile picture updated successfully"
-      });
-      
+      setPendingBlob(null);
+
+      toast({ title: 'Success!', description: 'Profile picture updated successfully' });
+      return downloadURL;
     } catch (error: any) {
       console.error('Error uploading profile picture:', error);
-      
-      // Clear timeout
-      clearTimeout(uploadTimeout);
-      
-      let errorMessage = "Failed to upload profile picture. Please try again.";
-      
+      let errorMessage = 'Failed to upload profile picture. Please try again.';
       if (error?.code === 'storage/unauthorized') {
-        errorMessage = "Permission denied. Please try logging out and back in.";
+        errorMessage = 'Permission denied. Please try logging out and back in.';
       } else if (error?.code === 'storage/quota-exceeded') {
-        errorMessage = "Storage quota exceeded. Please contact support.";
+        errorMessage = 'Storage quota exceeded. Please contact support.';
       } else if (error?.message?.includes('network') || error?.message?.includes('fetch')) {
-        errorMessage = "Network error. Please check your connection and try again.";
+        errorMessage = 'Network error. Please check your connection and try again.';
       } else if (error?.message?.includes('timeout')) {
-        errorMessage = "Upload timed out. Please try again with a smaller image.";
+        errorMessage = 'Upload timed out. Please try again with a smaller image.';
       }
-      
-      toast({
-        title: "Upload failed",
-        description: errorMessage,
-        variant: "destructive"
-      });
+      toast({ title: 'Upload failed', description: errorMessage, variant: 'destructive' });
+      return null;
     } finally {
+      clearTimeout(uploadTimeout);
       setUploading(false);
     }
   };
-
-  const handleCropCancel = () => {
     console.log('Crop cancelled');
     setShowCrop(false);
     setCropImageData(null);
@@ -257,10 +257,13 @@ export const useProfilePhotoHandlers = () => {
 
   return {
     uploading,
+    uploadProgress,
+    hasPendingUpload: !!pendingBlob,
     showCrop,
     cropImageData,
     handleFileChange,
     handleCropDone,
+    commitUpload,
     handleCropCancel,
     handleRemovePhoto
   };

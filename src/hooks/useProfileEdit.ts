@@ -36,12 +36,15 @@ export const useProfileEdit = () => {
   // Photo handling
   const {
     uploading,
+    uploadProgress,
     showCrop,
     cropImageData,
     handleFileChange,
     handleCropDone: cropDone,
     handleCropCancel,
-    handleRemovePhoto: removePhoto
+    handleRemovePhoto: removePhoto,
+    hasPendingUpload,
+    commitUpload
   } = useProfilePhotoHandlers();
 
   // Save functionality
@@ -70,22 +73,29 @@ export const useProfileEdit = () => {
   };
 
   const handleSave = async () => {
+    // If there's a pending profile photo, upload it now and use the final URL
+    let finalImage = profileImage;
+    if (hasPendingUpload) {
+      const url = await commitUpload(setProfileImage);
+      if (!url) return false; // upload failed; toast already shown
+      finalImage = url;
+    }
+
     const success = await saveProfile({
       username,
       displayName,
       bio,
       externalLink,
-      profileImage
+      profileImage: finalImage
     }, hasErrors);
     
     if (success) {
-      // Update original data
       updateOriginalData({
         username: username.trim(),
         displayName: displayName.trim(),
         bio: bio.trim(),
         externalLink: externalLink.trim(),
-        profileImage
+        profileImage: finalImage
       });
     }
     

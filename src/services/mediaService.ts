@@ -30,16 +30,34 @@ export const uploadChatMedia = async (file: File, chatId: string, messageId: str
 
 export const uploadPostMedia = async (file: File, postId: string): Promise<string> => {
   try {
+    console.log('📤 Starting post media upload:', { postId, fileSize: file.size, fileType: file.type });
+    
     const fileExtension = file.name.split('.').pop();
     const fileName = `${postId}.${fileExtension}`;
     const storageRef = ref(storage, `posts/${postId}/${fileName}`);
     
+    console.log('🔗 Storage path:', `posts/${postId}/${fileName}`);
+    
     const snapshot = await uploadBytes(storageRef, file);
+    console.log('✅ Upload bytes completed');
+    
     const downloadURL = await getDownloadURL(snapshot.ref);
+    console.log('✅ Post media upload successful:', downloadURL);
     
     return downloadURL;
   } catch (error) {
-    console.error('Error uploading post media:', error);
+    console.error('❌ Error uploading post media:', error);
+    
+    // Log specific error details for storage issues
+    if (error?.code) {
+      console.error('🔴 Storage error code:', error.code);
+      console.error('🔴 Storage error message:', error.message);
+      
+      if (error.code === 'storage/unauthorized') {
+        console.error('🔒 Storage unauthorized - check Firebase Storage rules for path:', `posts/${postId}/`);
+      }
+    }
+    
     throw error;
   }
 };
@@ -158,14 +176,28 @@ export const createCompletePost = async (
   mediaType: 'image' | 'video',
   settings: { allowComments: boolean; hideLikeCount: boolean } = { allowComments: true, hideLikeCount: false }
 ): Promise<string> => {
+  console.log('🚀 Starting createCompletePost:', { 
+    userId, 
+    caption, 
+    mediaType, 
+    fileSize: file.size, 
+    fileName: file.name,
+    fileType: file.type,
+    settings 
+  });
+  
   try {
     // Pre-generate post ID
     const postId = generateFirestoreId('posts');
+    console.log('📝 Generated post ID:', postId);
     
     // Upload media first using the pre-generated ID
+    console.log('📤 Starting media upload...');
     const mediaURL = await uploadPostMedia(file, postId);
+    console.log('✅ Media upload successful:', mediaURL);
     
     // Create complete post document with mediaURL already populated
+    console.log('📄 Creating Firestore document...');
     const postsRef = collection(db, 'posts');
     const docRef = await addDoc(postsRef, {
       userId,
@@ -179,9 +211,17 @@ export const createCompletePost = async (
       hideLikeCount: settings.hideLikeCount
     });
     
+    console.log('🎉 Post created successfully with ID:', docRef.id);
     return docRef.id;
   } catch (error) {
-    console.error('Error creating complete post:', error);
+    console.error('❌ Error in createCompletePost:', error);
+    
+    // Log specific error details
+    if (error?.code) {
+      console.error('🔴 Firebase error code:', error.code);
+      console.error('🔴 Firebase error message:', error.message);
+    }
+    
     // If Firestore creation fails after successful upload, we should clean up
     // But for now, just throw the error
     throw error;

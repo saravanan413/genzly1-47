@@ -211,6 +211,7 @@ export const useProfilePhotoHandlers = () => {
       setUploading(false);
     }
   };
+  const handleCropCancel = () => {
     console.log('Crop cancelled');
     setShowCrop(false);
     setCropImageData(null);

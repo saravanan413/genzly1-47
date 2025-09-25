@@ -2,6 +2,7 @@
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { collection, addDoc, serverTimestamp, doc } from 'firebase/firestore';
 import { storage, db } from '../config/firebase';
+import { networkUploader } from './networkAwareUpload';
 
 export const uploadChatMedia = async (file: File, chatId: string, messageId: string): Promise<string> => {
   try {
@@ -30,34 +31,27 @@ export const uploadChatMedia = async (file: File, chatId: string, messageId: str
 
 export const uploadPostMedia = async (file: File, postId: string): Promise<string> => {
   try {
-    console.log('📤 Starting post media upload:', { postId, fileSize: file.size, fileType: file.type });
+    console.log('📤 Starting network-aware post media upload:', { postId, fileSize: file.size, fileType: file.type });
     
     const fileExtension = file.name.split('.').pop();
     const fileName = `${postId}.${fileExtension}`;
-    const storageRef = ref(storage, `posts/${postId}/${fileName}`);
+    const storagePath = `posts/${postId}/${fileName}`;
     
-    console.log('🔗 Storage path:', `posts/${postId}/${fileName}`);
+    console.log('🔗 Storage path:', storagePath);
     
-    const snapshot = await uploadBytes(storageRef, file);
-    console.log('✅ Upload bytes completed');
-    
-    const downloadURL = await getDownloadURL(snapshot.ref);
-    console.log('✅ Post media upload successful:', downloadURL);
-    
-    return downloadURL;
+    // Use network-aware uploader for better reliability
+    const result = await networkUploader.uploadFile(file, storagePath, {
+      timeout: file.size > 10 * 1024 * 1024 ? 300000 : 120000 // 5 min for large files, 2 min for smaller
+    });
+
+    if (!result.success) {
+      throw new Error(result.error || 'Upload failed');
+    }
+
+    console.log('✅ Post media upload successful:', result.url);
+    return result.url!;
   } catch (error) {
     console.error('❌ Error uploading post media:', error);
-    
-    // Log specific error details for storage issues
-    if (error?.code) {
-      console.error('🔴 Storage error code:', error.code);
-      console.error('🔴 Storage error message:', error.message);
-      
-      if (error.code === 'storage/unauthorized') {
-        console.error('🔒 Storage unauthorized - check Firebase Storage rules for path:', `posts/${postId}/`);
-      }
-    }
-    
     throw error;
   }
 };
@@ -150,16 +144,27 @@ export const createStory = async (
 
 export const uploadReelMedia = async (file: File, reelId: string): Promise<string> => {
   try {
+    console.log('📤 Starting network-aware reel media upload:', { reelId, fileSize: file.size, fileType: file.type });
+    
     const fileExtension = file.name.split('.').pop();
     const fileName = `${reelId}.${fileExtension}`;
-    const storageRef = ref(storage, `reels/${reelId}/${fileName}`);
+    const storagePath = `reels/${reelId}/${fileName}`;
     
-    const snapshot = await uploadBytes(storageRef, file);
-    const downloadURL = await getDownloadURL(snapshot.ref);
+    console.log('🔗 Storage path:', storagePath);
     
-    return downloadURL;
+    // Use network-aware uploader with extended timeout for video files
+    const result = await networkUploader.uploadFile(file, storagePath, {
+      timeout: Math.max(300000, file.size / 1024 / 1024 * 30000) // 30 seconds per MB, minimum 5 minutes
+    });
+
+    if (!result.success) {
+      throw new Error(result.error || 'Upload failed');
+    }
+
+    console.log('✅ Reel media upload successful:', result.url);
+    return result.url!;
   } catch (error) {
-    console.error('Error uploading reel media:', error);
+    console.error('❌ Error uploading reel media:', error);
     throw error;
   }
 };
@@ -174,9 +179,10 @@ export const createCompletePost = async (
   caption: string,
   file: File,
   mediaType: 'image' | 'video',
-  settings: { allowComments: boolean; hideLikeCount: boolean } = { allowComments: true, hideLikeCount: false }
+  settings: { allowComments: boolean; hideLikeCount: boolean } = { allowComments: true, hideLikeCount: false },
+  onProgress?: (progress: number) => void
 ): Promise<string> => {
-  console.log('🚀 Starting createCompletePost:', { 
+  console.log('🚀 Starting createCompletePost with network-aware upload:', { 
     userId, 
     caption, 
     mediaType, 
@@ -191,10 +197,18 @@ export const createCompletePost = async (
     const postId = generateFirestoreId('posts');
     console.log('📝 Generated post ID:', postId);
     
-    // Upload media first using the pre-generated ID
-    console.log('📤 Starting media upload...');
-    const mediaURL = await uploadPostMedia(file, postId);
-    console.log('✅ Media upload successful:', mediaURL);
+    // Upload media first using network-aware uploader
+    console.log('📤 Starting network-aware media upload...');
+    const result = await networkUploader.uploadFile(file, `posts/${postId}/${postId}.${file.name.split('.').pop()}`, {
+      onProgress,
+      timeout: file.size > 10 * 1024 * 1024 ? 300000 : 120000
+    });
+
+    if (!result.success) {
+      throw new Error(result.error || 'Upload failed');
+    }
+
+    console.log('✅ Media upload successful:', result.url);
     
     // Create complete post document with mediaURL already populated
     console.log('📄 Creating Firestore document...');
@@ -202,7 +216,7 @@ export const createCompletePost = async (
     const docRef = await addDoc(postsRef, {
       userId,
       caption,
-      mediaURL,
+      mediaURL: result.url,
       mediaType,
       timestamp: serverTimestamp(),
       likes: 0,
@@ -222,8 +236,6 @@ export const createCompletePost = async (
       console.error('🔴 Firebase error message:', error.message);
     }
     
-    // If Firestore creation fails after successful upload, we should clean up
-    // But for now, just throw the error
     throw error;
   }
 };

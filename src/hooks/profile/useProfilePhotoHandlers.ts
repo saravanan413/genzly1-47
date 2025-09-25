@@ -2,13 +2,15 @@
 import { useState, ChangeEvent } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
-import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import { doc, updateDoc } from 'firebase/firestore';
-import { storage, db } from '../../config/firebase';
+import { db } from '../../config/firebase';
+import { networkUploader } from '../../services/networkAwareUpload';
+import { useNetworkStatus } from '../useNetworkStatus';
 
 export const useProfilePhotoHandlers = () => {
   const { currentUser } = useAuth();
   const { toast } = useToast();
+  const { networkInfo, estimateUpload } = useNetworkStatus();
 
   const [uploading, setUploading] = useState(false);
   const [showCrop, setShowCrop] = useState(false);
@@ -136,79 +138,86 @@ export const useProfilePhotoHandlers = () => {
       return null;
     }
 
-    console.log('Starting profile picture upload for user:', currentUser.uid);
-    setUploading(true);
-    setUploadProgress(0);
-
-    const uploadTimeout = setTimeout(() => {
-      console.warn('Upload timeout reached');
+    // Network pre-check
+    if (!networkInfo.isOnline) {
       toast({
-        title: 'Upload timeout',
-        description: 'Upload is taking too long. Please try again.',
+        title: 'No internet connection',
+        description: 'Please check your network and try again.',
         variant: 'destructive'
       });
-    }, 120000); // 2 minutes
+      return null;
+    }
+
+    const fileSizeMB = pendingBlob.size / (1024 * 1024);
+    const uploadEstimate = estimateUpload(fileSizeMB);
+    
+    // Show network warning if applicable
+    if (uploadEstimate.warningMessage && !uploadEstimate.recommendProceed) {
+      toast({
+        title: 'Network Warning',
+        description: uploadEstimate.warningMessage,
+        variant: 'destructive'
+      });
+      return null;
+    } else if (uploadEstimate.warningMessage) {
+      toast({
+        title: 'Network Notice',
+        description: uploadEstimate.warningMessage,
+      });
+    }
+
+    console.log('Starting network-aware profile picture upload:', {
+      userId: currentUser.uid,
+      fileSizeMB: fileSizeMB.toFixed(2),
+      estimatedTime: `${Math.ceil(uploadEstimate.estimatedTimeSeconds)}s`,
+      connectionType: networkInfo.connectionType
+    });
+
+    setUploading(true);
+    setUploadProgress(0);
 
     try {
       const timestamp = Date.now();
       const fileName = `profile_${timestamp}.jpg`;
-      const storageRef = ref(storage, `profilePictures/${currentUser.uid}/${fileName}`);
+      const storagePath = `profilePictures/${currentUser.uid}/${fileName}`;
 
-      const task = uploadBytesResumable(storageRef, pendingBlob, {
-        contentType: 'image/jpeg',
-        customMetadata: {
-          userId: currentUser.uid,
-          uploadedAt: new Date().toISOString()
-        }
+      // Use network-aware uploader
+      const result = await networkUploader.uploadFile(pendingBlob, storagePath, {
+        onProgress: (progress) => setUploadProgress(progress),
+        timeout: uploadEstimate.estimatedTimeSeconds * 1000 * 2 // 2x estimated time
       });
 
-      const downloadURL: string = await new Promise((resolve, reject) => {
-        task.on(
-          'state_changed',
-          (snapshot) => {
-            const prog = Math.round((snapshot.bytesTransferred / snapshot.totalBytes) * 100);
-            setUploadProgress(prog);
-          },
-          (err) => reject(err),
-          async () => {
-            try {
-              const url = await getDownloadURL(task.snapshot.ref);
-              resolve(url);
-            } catch (e) {
-              reject(e);
-            }
-          }
-        );
-      });
+      if (!result.success) {
+        throw new Error(result.error || 'Upload failed');
+      }
 
       console.log('Updating user document in Firestore...');
       const userDocRef = doc(db, 'users', currentUser.uid);
-      await updateDoc(userDocRef, { avatar: downloadURL, updatedAt: new Date() });
+      await updateDoc(userDocRef, { 
+        avatar: result.url, 
+        updatedAt: new Date() 
+      });
 
-      clearTimeout(uploadTimeout);
-
-      onImageUpdate(downloadURL);
+      onImageUpdate(result.url!);
       setPendingBlob(null);
 
-      toast({ title: 'Success!', description: 'Profile picture updated successfully' });
-      return downloadURL;
+      toast({ 
+        title: 'Success!', 
+        description: 'Profile picture updated successfully' 
+      });
+      return result.url!;
+      
     } catch (error: any) {
       console.error('Error uploading profile picture:', error);
-      let errorMessage = 'Failed to upload profile picture. Please try again.';
-      if (error?.code === 'storage/unauthorized') {
-        errorMessage = 'Permission denied. Please try logging out and back in.';
-      } else if (error?.code === 'storage/quota-exceeded') {
-        errorMessage = 'Storage quota exceeded. Please contact support.';
-      } else if (error?.message?.includes('network') || error?.message?.includes('fetch')) {
-        errorMessage = 'Network error. Please check your connection and try again.';
-      } else if (error?.message?.includes('timeout')) {
-        errorMessage = 'Upload timed out. Please try again with a smaller image.';
-      }
-      toast({ title: 'Upload failed', description: errorMessage, variant: 'destructive' });
+      toast({ 
+        title: 'Upload failed', 
+        description: error.message || 'Failed to upload profile picture. Please try again.',
+        variant: 'destructive' 
+      });
       return null;
     } finally {
-      clearTimeout(uploadTimeout);
       setUploading(false);
+      setUploadProgress(0);
     }
   };
   const handleCropCancel = () => {

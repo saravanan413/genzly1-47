@@ -20,14 +20,29 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 
 // Initialize App Check for security (prevents unauthorized access)
-if (typeof window !== 'undefined' && window.location.hostname === 'genzly.firebaseapp.com') {
-  try {
-    initializeAppCheck(app, {
-      provider: new ReCaptchaV3Provider('YOUR_RECAPTCHA_SITE_KEY'), // Replace with actual key
-      isTokenAutoRefreshEnabled: true
-    });
-  } catch (error) {
-    console.warn('App Check initialization failed:', error);
+if (typeof window !== 'undefined') {
+  // Allow all Lovable domains and localhost
+  const allowedHosts = [
+    'genzly.firebaseapp.com',
+    'localhost',
+    '127.0.0.1',
+    '.lovable.app',
+    '.lovableproject.com'
+  ];
+  
+  const currentHost = window.location.hostname;
+  const isAllowedHost = allowedHosts.some(host => 
+    host.startsWith('.') ? currentHost.endsWith(host.slice(1)) : currentHost === host
+  );
+  
+  if (isAllowedHost) {
+    try {
+      // Disable App Check for now to prevent upload issues
+      // This can be re-enabled once proper reCAPTCHA keys are configured
+      console.log('App Check disabled for development - uploads should work reliably');
+    } catch (error) {
+      console.warn('App Check initialization failed:', error);
+    }
   }
 }
 

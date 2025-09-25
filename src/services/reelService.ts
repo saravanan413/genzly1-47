@@ -4,39 +4,32 @@ import {
   serverTimestamp,
   doc
 } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { db, storage } from '../config/firebase';
+import { db } from '../config/firebase';
+import { networkUploader } from './networkAwareUpload';
 
 export const uploadReelVideo = async (file: File, reelId: string): Promise<string> => {
   try {
-    console.log('📤 Starting reel video upload:', { reelId, fileSize: file.size, fileType: file.type });
+    console.log('📤 Starting network-aware reel video upload:', { reelId, fileSize: file.size, fileType: file.type });
     
     const fileExtension = file.name.split('.').pop();
     const fileName = `${reelId}.${fileExtension}`;
-    const storageRef = ref(storage, `reels/${reelId}/${fileName}`);
+    const storagePath = `reels/${reelId}/${fileName}`;
     
-    console.log('🔗 Storage path:', `reels/${reelId}/${fileName}`);
+    console.log('🔗 Storage path:', storagePath);
     
-    const snapshot = await uploadBytes(storageRef, file);
-    console.log('✅ Upload bytes completed');
-    
-    const downloadURL = await getDownloadURL(snapshot.ref);
-    console.log('✅ Reel video upload successful:', downloadURL);
-    
-    return downloadURL;
-  } catch (error) {
-    console.error('❌ Error uploading reel video:', error);
-    
-    // Log specific error details for storage issues
-    if (error?.code) {
-      console.error('🔴 Storage error code:', error.code);
-      console.error('🔴 Storage error message:', error.message);
-      
-      if (error.code === 'storage/unauthorized') {
-        console.error('🔒 Storage unauthorized - check Firebase Storage rules for path:', `reels/${reelId}/`);
-      }
+    // Use network-aware uploader with extended timeout for video files
+    const result = await networkUploader.uploadFile(file, storagePath, {
+      timeout: Math.max(600000, file.size / 1024 / 1024 * 60000) // 1 minute per MB, minimum 10 minutes
+    });
+
+    if (!result.success) {
+      throw new Error(result.error || 'Upload failed');
     }
     
+    console.log('✅ Reel video upload successful:', result.url);
+    return result.url!;
+  } catch (error) {
+    console.error('❌ Error uploading reel video:', error);
     throw error;
   }
 };
@@ -77,9 +70,10 @@ export const createCompleteReel = async (
   caption: string,
   file: File,
   settings: { allowComments: boolean; hideLikeCount: boolean } = { allowComments: true, hideLikeCount: false },
-  music?: string
+  music?: string,
+  onProgress?: (progress: number) => void
 ): Promise<string> => {
-  console.log('🚀 Starting createCompleteReel:', { 
+  console.log('🚀 Starting createCompleteReel with network-aware upload:', { 
     userId, 
     caption, 
     fileSize: file.size, 
@@ -94,18 +88,26 @@ export const createCompleteReel = async (
     const reelId = generateFirestoreId('reels');
     console.log('📝 Generated reel ID:', reelId);
     
-    // Upload video first using the pre-generated ID
-    console.log('📤 Starting video upload...');
-    const videoURL = await uploadReelVideo(file, reelId);
-    console.log('✅ Video upload successful:', videoURL);
+    // Upload video using network-aware uploader
+    console.log('📤 Starting network-aware video upload...');
+    const result = await networkUploader.uploadFile(file, `reels/${reelId}/${reelId}.${file.name.split('.').pop()}`, {
+      onProgress,
+      timeout: Math.max(600000, file.size / 1024 / 1024 * 60000) // 1 minute per MB, minimum 10 minutes
+    });
+
+    if (!result.success) {
+      throw new Error(result.error || 'Upload failed');
+    }
+
+    console.log('✅ Video upload successful:', result.url);
     
     // Create complete reel document with mediaURL already populated
     console.log('📄 Creating Firestore document...');
     const reelsRef = collection(db, 'reels');
     const docRef = await addDoc(reelsRef, {
       userId,
-      mediaURL: videoURL,
-      videoURL: videoURL,
+      mediaURL: result.url,
+      videoURL: result.url,
       caption,
       music: music || 'Original Audio',
       mediaType: 'video',

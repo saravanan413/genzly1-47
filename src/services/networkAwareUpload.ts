@@ -1,4 +1,4 @@
-import { ref, uploadBytes, getDownloadURL, UploadResult } from 'firebase/storage';
+import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import { storage } from '../config/firebase';
 
 export interface UploadOptions {
@@ -117,23 +117,50 @@ export class NetworkAwareUploader {
       throw new Error('Upload cancelled');
     }
 
-    // Use uploadBytes for simpler, more reliable uploads
-    console.log('📤 Uploading file to Firebase Storage...');
-    
-    const uploadResult: UploadResult = await uploadBytes(storageRef, file, {
+    // Use Firebase resumable uploads for reliability and real progress
+    console.log('📤 Uploading file to Firebase Storage (resumable)...');
+
+    const metadata = {
       contentType: (file as any).type || 'application/octet-stream',
       customMetadata: {
         uploadedAt: new Date().toISOString(),
         originalSize: file.size.toString(),
         userAgent: navigator.userAgent
       }
+    } as const;
+
+    const uploadTask = uploadBytesResumable(storageRef, file, metadata);
+
+    // Wire abort -> cancel upload task
+    const onAbort = () => {
+      try { uploadTask.cancel(); } catch {}
+    };
+    signal.addEventListener('abort', onAbort, { once: true });
+
+    const downloadURL: string = await new Promise((resolve, reject) => {
+      uploadTask.on('state_changed',
+        (snapshot) => {
+          if (options.onProgress && snapshot.totalBytes > 0) {
+            const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+            options.onProgress(progress);
+          }
+        },
+        (error) => {
+          reject(error);
+        },
+        async () => {
+          try {
+            const url = await getDownloadURL(uploadTask.snapshot.ref);
+            resolve(url);
+          } catch (err) {
+            reject(err);
+          }
+        }
+      );
     });
 
-    console.log('✅ Upload bytes completed, getting download URL...');
+    signal.removeEventListener('abort', onAbort as any);
 
-    // Get download URL
-    const downloadURL = await getDownloadURL(uploadResult.ref);
-    
     console.log('✅ Download URL retrieved successfully');
     return downloadURL;
   }

@@ -10,15 +10,18 @@ export const uploadChatMedia = async (file: File, chatId: string, messageId: str
     
     const fileExtension = file.name.split('.').pop();
     const fileName = `${messageId}.${fileExtension}`;
-    const storageRef = ref(storage, `chats/${chatId}/${messageId}/${fileName}`);
+    const storagePath = `chats/${chatId}/${messageId}/${fileName}`;
     
-    console.log('🔗 Storage path:', `chats/${chatId}/${messageId}/${fileName}`);
+    console.log('🔗 Storage path:', storagePath);
     
-    const snapshot = await uploadBytes(storageRef, file);
-    const downloadURL = await getDownloadURL(snapshot.ref);
-    
-    console.log('✅ Chat media upload successful:', downloadURL);
-    return downloadURL;
+    const result = await networkUploader.uploadFile(file, storagePath, {
+      timeout: file.size > 10 * 1024 * 1024 ? 300000 : 120000
+    });
+    if (!result.success) {
+      throw new Error(result.error || 'Upload failed');
+    }
+    console.log('✅ Chat media upload successful:', result.url);
+    return result.url!;
   } catch (error) {
     console.error('❌ Error uploading chat media:', error);
     // Add specific error details for debugging
@@ -86,15 +89,18 @@ export const uploadProfilePicture = async (file: File, userId: string): Promise<
     
     const fileExtension = file.name.split('.').pop();
     const fileName = `profile.${fileExtension}`;
-    const storageRef = ref(storage, `profilePictures/${userId}/${fileName}`);
+    const storagePath = `profilePictures/${userId}/${fileName}`;
     
-    console.log('🔗 Storage path:', `profilePictures/${userId}/${fileName}`);
+    console.log('🔗 Storage path:', storagePath);
     
-    const snapshot = await uploadBytes(storageRef, file);
-    const downloadURL = await getDownloadURL(snapshot.ref);
-    
-    console.log('✅ Profile picture upload successful:', downloadURL);
-    return downloadURL;
+    const result = await networkUploader.uploadFile(file, storagePath, {
+      timeout: file.size > 10 * 1024 * 1024 ? 300000 : 120000
+    });
+    if (!result.success) {
+      throw new Error(result.error || 'Upload failed');
+    }
+    console.log('✅ Profile picture upload successful:', result.url);
+    return result.url!;
   } catch (error) {
     console.error('❌ Error uploading profile picture:', error);
     if (error.code === 'storage/unauthorized') {
@@ -108,12 +114,14 @@ export const uploadStoryMedia = async (file: File, storyId: string): Promise<str
   try {
     const fileExtension = file.name.split('.').pop();
     const fileName = `${storyId}.${fileExtension}`;
-    const storageRef = ref(storage, `stories/${storyId}/${fileName}`);
-    
-    const snapshot = await uploadBytes(storageRef, file);
-    const downloadURL = await getDownloadURL(snapshot.ref);
-    
-    return downloadURL;
+    const storagePath = `stories/${storyId}/${fileName}`;
+    const result = await networkUploader.uploadFile(file, storagePath, {
+      timeout: file.size > 10 * 1024 * 1024 ? 300000 : 120000
+    });
+    if (!result.success) {
+      throw new Error(result.error || 'Upload failed');
+    }
+    return result.url!;
   } catch (error) {
     console.error('Error uploading story media:', error);
     throw error;

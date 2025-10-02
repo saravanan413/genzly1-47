@@ -183,8 +183,7 @@ export const useProfilePhotoHandlers = () => {
 
       // Use network-aware uploader
       const result = await networkUploader.uploadFile(pendingBlob, storagePath, {
-        onProgress: (progress) => setUploadProgress(progress),
-        timeout: uploadEstimate.estimatedTimeSeconds * 1000 * 2 // 2x estimated time
+        onProgress: (progress) => setUploadProgress(progress)
       });
 
       if (!result.success) {

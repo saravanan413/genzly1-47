@@ -53,10 +53,11 @@ export class NetworkAwareUploader {
       
       // Adaptive timeout based on file size and connection
       const fileSizeMB = file.size / (1024 * 1024);
-      const baseTimeout = options.timeout || 120000; // 2 minutes default
-      const adaptiveTimeout = isSlowConnection ? 
-        Math.max(baseTimeout, fileSizeMB * 60000) : // 1 minute per MB on slow connections
-        Math.max(baseTimeout, fileSizeMB * 20000);  // 20 seconds per MB on fast connections
+      const MIN_TIMEOUT = 30000; // 30s minimum
+      const DEFAULT_TIMEOUT = 120000; // 2 minutes default
+      const requestedTimeout = options.timeout ?? DEFAULT_TIMEOUT;
+      const sizeBasedTimeout = isSlowConnection ? (fileSizeMB * 60000) : (fileSizeMB * 20000);
+      const adaptiveTimeout = Math.max(requestedTimeout, sizeBasedTimeout, MIN_TIMEOUT);
 
       console.log(`🚀 Starting network-aware upload:`, {
         uploadId,
@@ -120,6 +121,7 @@ export class NetworkAwareUploader {
     console.log('📤 Uploading file to Firebase Storage...');
     
     const uploadResult: UploadResult = await uploadBytes(storageRef, file, {
+      contentType: (file as any).type || 'application/octet-stream',
       customMetadata: {
         uploadedAt: new Date().toISOString(),
         originalSize: file.size.toString(),

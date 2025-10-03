@@ -31,7 +31,8 @@ export class NetworkAwareUploader {
   async uploadFile(
     file: Blob,
     storagePath: string,
-    options: UploadOptions = {}
+    options: UploadOptions = {},
+    metadata?: { contentType: string }
   ): Promise<NetworkAwareUploadResult> {
     const uploadId = `${storagePath}_${Date.now()}`;
     const controller = new AbortController();
@@ -73,7 +74,7 @@ export class NetworkAwareUploader {
       const storageRef = ref(storage, storagePath);
 
       // Set up timeout race
-      const uploadPromise = this.performUpload(storageRef, file, options, controller.signal);
+      const uploadPromise = this.performUpload(storageRef, file, options, controller.signal, metadata);
       const timeoutPromise = new Promise<never>((_, reject) => {
         setTimeout(() => {
           reject(new Error(`Upload timeout after ${Math.round(adaptiveTimeout / 1000)}s. Please check your connection and try again.`));
@@ -111,7 +112,8 @@ export class NetworkAwareUploader {
     storageRef: any,
     file: Blob,
     options: UploadOptions,
-    signal: AbortSignal
+    signal: AbortSignal,
+    metadata?: { contentType: string }
   ): Promise<string> {
     // Check if upload was cancelled before starting
     if (signal.aborted) {
@@ -121,8 +123,8 @@ export class NetworkAwareUploader {
     // Use Firebase resumable uploads for reliability and real progress
     console.log('📤 Uploading file to Firebase Storage (resumable)...');
 
-    const metadata = {
-      contentType: (file as any).type || 'application/octet-stream',
+    const uploadMetadata = {
+      contentType: metadata?.contentType || (file as any).type || 'application/octet-stream',
       customMetadata: {
         uploadedAt: new Date().toISOString(),
         originalSize: file.size.toString(),
@@ -130,7 +132,7 @@ export class NetworkAwareUploader {
       }
     } as const;
 
-    const uploadTask = uploadBytesResumable(storageRef, file, metadata);
+    const uploadTask = uploadBytesResumable(storageRef, file, uploadMetadata);
 
     // Wire abort -> cancel upload task
     const onAbort = () => {

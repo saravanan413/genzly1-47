@@ -8,15 +8,21 @@ export const uploadChatMedia = async (file: File, chatId: string, messageId: str
   try {
     console.log('📤 Uploading chat media:', { chatId, messageId, fileSize: file.size, fileType: file.type });
     
-    const fileExtension = file.name.split('.').pop();
-    const fileName = `${messageId}.${fileExtension}`;
-    const storagePath = `chats/${chatId}/${messageId}/${fileName}`;
+    // Generate unique filename: Date.now() + '-' + originalName
+    const uniqueFileName = `${Date.now()}-${file.name}`;
+    const storagePath = `chats/${chatId}/${messageId}/${uniqueFileName}`;
     
     console.log('🔗 Storage path:', storagePath);
     
-    const result = await networkUploader.uploadFile(file, storagePath, {
-      timeout: file.size > 10 * 1024 * 1024 ? 300000 : 120000
-    });
+    const result = await networkUploader.uploadFile(
+      file, 
+      storagePath, 
+      {
+        timeout: file.size > 10 * 1024 * 1024 ? 300000 : 120000
+      },
+      { contentType: file.type }
+    );
+    
     if (!result.success) {
       throw new Error(result.error || 'Upload failed');
     }
@@ -24,7 +30,6 @@ export const uploadChatMedia = async (file: File, chatId: string, messageId: str
     return result.url!;
   } catch (error) {
     console.error('❌ Error uploading chat media:', error);
-    // Add specific error details for debugging
     if (error.code === 'storage/unauthorized') {
       console.error('🔒 Storage unauthorized - check Firebase Storage rules for path:', `chats/${chatId}/${messageId}/`);
     }
@@ -36,16 +41,20 @@ export const uploadPostMedia = async (file: File, postId: string): Promise<strin
   try {
     console.log('📤 Starting network-aware post media upload:', { postId, fileSize: file.size, fileType: file.type });
     
-    const fileExtension = file.name.split('.').pop();
-    const fileName = `${postId}.${fileExtension}`;
-    const storagePath = `posts/${postId}/${fileName}`;
+    // Generate unique filename: Date.now() + '-' + originalName
+    const uniqueFileName = `${Date.now()}-${file.name}`;
+    const storagePath = `posts/${postId}/${uniqueFileName}`;
     
     console.log('🔗 Storage path:', storagePath);
     
-    // Use network-aware uploader for better reliability
-    const result = await networkUploader.uploadFile(file, storagePath, {
-      timeout: file.size > 10 * 1024 * 1024 ? 300000 : 120000 // 5 min for large files, 2 min for smaller
-    });
+    const result = await networkUploader.uploadFile(
+      file, 
+      storagePath, 
+      {
+        timeout: file.size > 10 * 1024 * 1024 ? 300000 : 120000
+      },
+      { contentType: file.type }
+    );
 
     if (!result.success) {
       throw new Error(result.error || 'Upload failed');
@@ -87,15 +96,20 @@ export const uploadProfilePicture = async (file: File, userId: string): Promise<
   try {
     console.log('📤 Uploading profile picture:', { userId, fileSize: file.size, fileType: file.type });
     
-    const fileExtension = file.name.split('.').pop();
-    const fileName = `profile.${fileExtension}`;
-    const storagePath = `profilePictures/${userId}/${fileName}`;
+    // Always use profile.jpg to overwrite previous profile picture
+    const storagePath = `profilePictures/${userId}/profile.jpg`;
     
     console.log('🔗 Storage path:', storagePath);
     
-    const result = await networkUploader.uploadFile(file, storagePath, {
-      timeout: file.size > 10 * 1024 * 1024 ? 300000 : 120000
-    });
+    const result = await networkUploader.uploadFile(
+      file, 
+      storagePath, 
+      {
+        timeout: file.size > 10 * 1024 * 1024 ? 300000 : 120000
+      },
+      { contentType: file.type }
+    );
+    
     if (!result.success) {
       throw new Error(result.error || 'Upload failed');
     }
@@ -112,18 +126,30 @@ export const uploadProfilePicture = async (file: File, userId: string): Promise<
 
 export const uploadStoryMedia = async (file: File, storyId: string): Promise<string> => {
   try {
-    const fileExtension = file.name.split('.').pop();
-    const fileName = `${storyId}.${fileExtension}`;
-    const storagePath = `stories/${storyId}/${fileName}`;
-    const result = await networkUploader.uploadFile(file, storagePath, {
-      timeout: file.size > 10 * 1024 * 1024 ? 300000 : 120000
-    });
+    console.log('📤 Uploading story media:', { storyId, fileSize: file.size, fileType: file.type });
+    
+    // Generate unique filename: Date.now() + '-' + originalName
+    const uniqueFileName = `${Date.now()}-${file.name}`;
+    const storagePath = `stories/${storyId}/${uniqueFileName}`;
+    
+    console.log('🔗 Storage path:', storagePath);
+    
+    const result = await networkUploader.uploadFile(
+      file, 
+      storagePath, 
+      {
+        timeout: file.size > 10 * 1024 * 1024 ? 300000 : 120000
+      },
+      { contentType: file.type }
+    );
+    
     if (!result.success) {
       throw new Error(result.error || 'Upload failed');
     }
+    console.log('✅ Story media upload successful:', result.url);
     return result.url!;
   } catch (error) {
-    console.error('Error uploading story media:', error);
+    console.error('❌ Error uploading story media:', error);
     throw error;
   }
 };
@@ -154,16 +180,20 @@ export const uploadReelMedia = async (file: File, reelId: string): Promise<strin
   try {
     console.log('📤 Starting network-aware reel media upload:', { reelId, fileSize: file.size, fileType: file.type });
     
-    const fileExtension = file.name.split('.').pop();
-    const fileName = `${reelId}.${fileExtension}`;
-    const storagePath = `reels/${reelId}/${fileName}`;
+    // Generate unique filename: Date.now() + '-' + originalName
+    const uniqueFileName = `${Date.now()}-${file.name}`;
+    const storagePath = `reels/${reelId}/${uniqueFileName}`;
     
     console.log('🔗 Storage path:', storagePath);
     
-    // Use network-aware uploader with extended timeout for video files
-    const result = await networkUploader.uploadFile(file, storagePath, {
-      timeout: Math.max(300000, file.size / 1024 / 1024 * 30000) // 30 seconds per MB, minimum 5 minutes
-    });
+    const result = await networkUploader.uploadFile(
+      file, 
+      storagePath, 
+      {
+        timeout: Math.max(300000, file.size / 1024 / 1024 * 30000)
+      },
+      { contentType: file.type }
+    );
 
     if (!result.success) {
       throw new Error(result.error || 'Upload failed');
@@ -205,12 +235,21 @@ export const createCompletePost = async (
     const postId = generateFirestoreId('posts');
     console.log('📝 Generated post ID:', postId);
     
+    // Generate unique filename
+    const uniqueFileName = `${Date.now()}-${file.name}`;
+    const storagePath = `posts/${postId}/${uniqueFileName}`;
+    
     // Upload media first using network-aware uploader
     console.log('📤 Starting network-aware media upload...');
-    const result = await networkUploader.uploadFile(file, `posts/${postId}/${postId}.${file.name.split('.').pop()}`, {
-      onProgress,
-      timeout: file.size > 10 * 1024 * 1024 ? 300000 : 120000
-    });
+    const result = await networkUploader.uploadFile(
+      file, 
+      storagePath, 
+      {
+        onProgress,
+        timeout: file.size > 10 * 1024 * 1024 ? 300000 : 120000
+      },
+      { contentType: file.type }
+    );
 
     if (!result.success) {
       throw new Error(result.error || 'Upload failed');

@@ -3,7 +3,6 @@ import { initializeApp } from 'firebase/app';
 import { getFirestore, connectFirestoreEmulator } from 'firebase/firestore';
 import { getAuth, GoogleAuthProvider, connectAuthEmulator } from 'firebase/auth';
 import { getStorage, connectStorageEmulator } from 'firebase/storage';
-import { initializeAppCheck, ReCaptchaV3Provider } from 'firebase/app-check';
 
 // Firebase configuration
 const firebaseConfig = {
@@ -19,44 +18,8 @@ const firebaseConfig = {
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
 
-// Initialize App Check for security (prevents unauthorized access)
-if (typeof window !== 'undefined') {
-  // Allow all Lovable domains and localhost
-  const allowedHosts = [
-    'genzly.firebaseapp.com',
-    'localhost',
-    '127.0.0.1',
-    '.lovable.app',
-    '.lovableproject.com'
-  ];
-  
-  const currentHost = window.location.hostname;
-  const isAllowedHost = allowedHosts.some(host => 
-    host.startsWith('.') ? currentHost.endsWith(host.slice(1)) : currentHost === host
-  );
-  
-  if (isAllowedHost) {
-    try {
-      // Enable App Check debug mode on allowed dev/staging hosts
-      // This avoids silent Storage rejections when App Check enforcement is enabled
-      (window as any).FIREBASE_APPCHECK_DEBUG_TOKEN = true;
-
-      // Optional: provide a reCAPTCHA v3 site key via <meta name="recaptcha-site-key" content="..." />
-      const siteKey = (document.querySelector('meta[name="recaptcha-site-key"]') as HTMLMetaElement)?.content;
-      try {
-        initializeAppCheck(app, {
-          provider: new ReCaptchaV3Provider(siteKey || 'unused'),
-          isTokenAutoRefreshEnabled: true,
-        });
-        console.log('Firebase App Check initialized (debug mode)');
-      } catch (err) {
-        console.warn('App Check init skipped (no valid site key). Proceeding without App Check in debug mode.', err);
-      }
-    } catch (error) {
-      console.warn('App Check initialization failed:', error);
-    }
-  }
-}
+// App Check disabled to allow uploads without additional setup
+// To enable: Configure App Check in Firebase Console with reCAPTCHA v3
 
 // Initialize Firebase services
 export const db = getFirestore(app);

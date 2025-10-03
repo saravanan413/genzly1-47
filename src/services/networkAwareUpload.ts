@@ -55,9 +55,10 @@ export class NetworkAwareUploader {
       const fileSizeMB = file.size / (1024 * 1024);
       const MIN_TIMEOUT = 30000; // 30s minimum
       const DEFAULT_TIMEOUT = 120000; // 2 minutes default
+      const MAX_TIMEOUT = 300000; // 5 minutes maximum cap
       const requestedTimeout = options.timeout ?? DEFAULT_TIMEOUT;
       const sizeBasedTimeout = isSlowConnection ? (fileSizeMB * 60000) : (fileSizeMB * 20000);
-      const adaptiveTimeout = Math.max(requestedTimeout, sizeBasedTimeout, MIN_TIMEOUT);
+      const adaptiveTimeout = Math.min(Math.max(requestedTimeout, sizeBasedTimeout, MIN_TIMEOUT), MAX_TIMEOUT);
 
       console.log(`🚀 Starting network-aware upload:`, {
         uploadId,
@@ -137,6 +138,25 @@ export class NetworkAwareUploader {
     };
     signal.addEventListener('abort', onAbort, { once: true });
 
+    // Stalled upload watchdog (detects no progress and cancels)
+    let lastBytes = 0;
+    let lastTick = Date.now();
+    let cancelledByWatchdog = false;
+    const connection = (navigator as any).connection;
+    const stallThreshold = (connection?.effectiveType === 'slow-2g' || connection?.effectiveType === '2g') ? 30000 : 20000; // 30s on very slow, else 20s
+    const stallTimer = window.setInterval(() => {
+      const bytes = uploadTask.snapshot?.bytesTransferred ?? 0;
+      if (bytes > lastBytes) {
+        lastBytes = bytes;
+        lastTick = Date.now();
+        return;
+      }
+      if (Date.now() - lastTick > stallThreshold) {
+        cancelledByWatchdog = true;
+        try { uploadTask.cancel(); } catch {}
+      }
+    }, 2000);
+
     const downloadURL: string = await new Promise((resolve, reject) => {
       uploadTask.on('state_changed',
         (snapshot) => {
@@ -144,11 +164,19 @@ export class NetworkAwareUploader {
             const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
             options.onProgress(progress);
           }
+          // update watchdog counters
+          lastBytes = snapshot.bytesTransferred;
+          lastTick = Date.now();
         },
         (error) => {
+          window.clearInterval(stallTimer);
+          if (cancelledByWatchdog && error?.code === 'storage/canceled') {
+            return reject(new Error('Upload stalled (no progress). This is often caused by blocked requests (App Check or Storage rules).'));
+          }
           reject(error);
         },
         async () => {
+          window.clearInterval(stallTimer);
           try {
             const url = await getDownloadURL(uploadTask.snapshot.ref);
             resolve(url);
@@ -168,39 +196,67 @@ export class NetworkAwareUploader {
   private getNetworkAwareErrorMessage(error: any): string {
     const connection = (navigator as any).connection;
     const isOnline = navigator.onLine;
+
+    // Log raw error details for debugging
+    try {
+      console.error('Upload error details:', {
+        name: error?.name,
+        code: error?.code,
+        message: error?.message,
+        serverResponse: error?.serverResponse,
+      });
+    } catch {}
     
     if (!isOnline) {
       return 'No internet connection. Please check your network and try again.';
     }
 
+    if (error?.message?.includes('stalled')) {
+      return 'Upload stalled due to no progress. This can be caused by blocked requests (App Check or Storage rules).';
+    }
+
+    if (error?.code === 'storage/canceled') {
+      return 'Upload was canceled.';
+    }
+
+    if (error?.code === 'storage/unauthenticated') {
+      return 'You need to sign in to upload. Please log in and try again.';
+    }
+
     if (error?.code === 'storage/unauthorized') {
-      return 'Permission denied. Please try logging out and back in.';
+      // Often caused by Storage rules or App Check enforcement
+      if (String(error?.serverResponse || '').toLowerCase().includes('app check')) {
+        return 'Upload blocked by App Check. Enable App Check for this app or run in debug mode during development.';
+      }
+      return 'Permission denied by Storage rules. Ensure the user has access to this path.';
     }
     
     if (error?.code === 'storage/quota-exceeded') {
       return 'Storage quota exceeded. Please contact support.';
     }
     
+    if (error?.code === 'storage/retry-limit-exceeded') {
+      return 'Upload failed after multiple retries. Please try again.';
+    }
+
     if (error?.code === 'storage/unknown') {
       if (connection?.effectiveType === 'slow-2g' || connection?.effectiveType === '2g') {
-        return 'Upload failed due to slow connection. Please try again or use a faster network.';
+        return 'Upload failed due to very slow connection. Try again on a faster network.';
       }
       return 'Upload failed due to network issues. Please try again.';
     }
     
     if (error?.message?.includes('timeout')) {
-      return connection?.effectiveType === 'slow-2g' || connection?.effectiveType === '2g' ?
-        'Upload timeout due to slow connection. Please try again with a smaller file or faster network.' :
-        'Upload timeout. Please check your connection and try again.';
+      return (connection?.effectiveType === 'slow-2g' || connection?.effectiveType === '2g')
+        ? 'Upload timeout due to slow connection. Try again with a smaller file or faster network.'
+        : 'Upload timeout. Please check your connection and try again.';
     }
     
     if (error?.message?.includes('network') || error?.message?.includes('fetch')) {
       return 'Network error occurred. Please check your connection and try again.';
     }
 
-    // Generic error with network context
-    const networkContext = connection?.effectiveType ? 
-      ` (Connection: ${connection.effectiveType})` : '';
+    const networkContext = connection?.effectiveType ? ` (Connection: ${connection.effectiveType})` : '';
     return `Upload failed${networkContext}. Please try again.`;
   }
 

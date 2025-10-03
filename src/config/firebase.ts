@@ -37,9 +37,21 @@ if (typeof window !== 'undefined') {
   
   if (isAllowedHost) {
     try {
-      // Disable App Check for now to prevent upload issues
-      // This can be re-enabled once proper reCAPTCHA keys are configured
-      console.log('App Check disabled for development - uploads should work reliably');
+      // Enable App Check debug mode on allowed dev/staging hosts
+      // This avoids silent Storage rejections when App Check enforcement is enabled
+      (window as any).FIREBASE_APPCHECK_DEBUG_TOKEN = true;
+
+      // Optional: provide a reCAPTCHA v3 site key via <meta name="recaptcha-site-key" content="..." />
+      const siteKey = (document.querySelector('meta[name="recaptcha-site-key"]') as HTMLMetaElement)?.content;
+      try {
+        initializeAppCheck(app, {
+          provider: new ReCaptchaV3Provider(siteKey || 'unused'),
+          isTokenAutoRefreshEnabled: true,
+        });
+        console.log('Firebase App Check initialized (debug mode)');
+      } catch (err) {
+        console.warn('App Check init skipped (no valid site key). Proceeding without App Check in debug mode.', err);
+      }
     } catch (error) {
       console.warn('App Check initialization failed:', error);
     }

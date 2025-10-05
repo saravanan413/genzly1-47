@@ -37,13 +37,13 @@ export const uploadChatMedia = async (file: File, chatId: string, messageId: str
   }
 };
 
-export const uploadPostMedia = async (file: File, postId: string): Promise<string> => {
+export const uploadPostMedia = async (file: File, userId: string): Promise<string> => {
   try {
-    console.log('📤 Starting network-aware post media upload:', { postId, fileSize: file.size, fileType: file.type });
+    console.log('📤 Starting network-aware post media upload:', { userId, fileSize: file.size, fileType: file.type });
     
     // Generate unique filename: Date.now() + '-' + originalName
     const uniqueFileName = `${Date.now()}-${file.name}`;
-    const storagePath = `posts/${postId}/${uniqueFileName}`;
+    const storagePath = `posts/${userId}/${uniqueFileName}`;
     
     console.log('🔗 Storage path:', storagePath);
     
@@ -124,13 +124,13 @@ export const uploadProfilePicture = async (file: File, userId: string): Promise<
   }
 };
 
-export const uploadStoryMedia = async (file: File, storyId: string): Promise<string> => {
+export const uploadStoryMedia = async (file: File, userId: string): Promise<string> => {
   try {
-    console.log('📤 Uploading story media:', { storyId, fileSize: file.size, fileType: file.type });
+    console.log('📤 Uploading story media:', { userId, fileSize: file.size, fileType: file.type });
     
     // Generate unique filename: Date.now() + '-' + originalName
     const uniqueFileName = `${Date.now()}-${file.name}`;
-    const storagePath = `stories/${storyId}/${uniqueFileName}`;
+    const storagePath = `stories/${userId}/${uniqueFileName}`;
     
     console.log('🔗 Storage path:', storagePath);
     
@@ -176,13 +176,13 @@ export const createStory = async (
   }
 };
 
-export const uploadReelMedia = async (file: File, reelId: string): Promise<string> => {
+export const uploadReelMedia = async (file: File, userId: string): Promise<string> => {
   try {
-    console.log('📤 Starting network-aware reel media upload:', { reelId, fileSize: file.size, fileType: file.type });
+    console.log('📤 Starting network-aware reel media upload:', { userId, fileSize: file.size, fileType: file.type });
     
     // Generate unique filename: Date.now() + '-' + originalName
     const uniqueFileName = `${Date.now()}-${file.name}`;
-    const storagePath = `reels/${reelId}/${uniqueFileName}`;
+    const storagePath = `reels/${userId}/${uniqueFileName}`;
     
     console.log('🔗 Storage path:', storagePath);
     
@@ -231,13 +231,9 @@ export const createCompletePost = async (
   });
   
   try {
-    // Pre-generate post ID
-    const postId = generateFirestoreId('posts');
-    console.log('📝 Generated post ID:', postId);
-    
     // Generate unique filename
     const uniqueFileName = `${Date.now()}-${file.name}`;
-    const storagePath = `posts/${postId}/${uniqueFileName}`;
+    const storagePath = `posts/${userId}/${uniqueFileName}`;
     
     // Upload media first using network-aware uploader
     console.log('📤 Starting network-aware media upload...');

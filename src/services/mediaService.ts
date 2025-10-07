@@ -37,6 +37,95 @@ export const uploadChatMedia = async (file: File, chatId: string, messageId: str
   }
 };
 
+/**
+ * Upload multiple versions of post media (original, feed, thumbnail)
+ * Returns URLs for all versions
+ */
+export const uploadPostMediaVersions = async (
+  userId: string,
+  original: File,
+  feed?: File,
+  thumb?: File,
+  onProgress?: (stage: string, progress: number) => void
+): Promise<{ original: string; feed?: string; thumb?: string }> => {
+  try {
+    console.log('📤 Starting multi-version post media upload:', { 
+      userId, 
+      originalSize: original.size,
+      hasFeed: !!feed,
+      hasThumb: !!thumb
+    });
+
+    const timestamp = Date.now();
+    const baseName = original.name.split('.')[0];
+    
+    // Upload original
+    onProgress?.('uploadingOriginal', 0);
+    const originalPath = `posts/${userId}/${timestamp}-${original.name}`;
+    const originalResult = await networkUploader.uploadFile(
+      original,
+      originalPath,
+      {
+        timeout: original.size > 10 * 1024 * 1024 ? 300000 : 120000,
+        onProgress: (progress) => onProgress?.('uploadingOriginal', progress)
+      },
+      { contentType: original.type }
+    );
+
+    if (!originalResult.success) {
+      throw new Error(originalResult.error || 'Original upload failed');
+    }
+
+    const urls: { original: string; feed?: string; thumb?: string } = {
+      original: originalResult.url!
+    };
+
+    // Upload feed version if provided
+    if (feed) {
+      onProgress?.('uploadingFeed', 0);
+      const feedPath = `posts/${userId}/${timestamp}-feed_${baseName}.jpg`;
+      const feedResult = await networkUploader.uploadFile(
+        feed,
+        feedPath,
+        {
+          timeout: 120000,
+          onProgress: (progress) => onProgress?.('uploadingFeed', progress)
+        },
+        { contentType: 'image/jpeg' }
+      );
+
+      if (feedResult.success) {
+        urls.feed = feedResult.url!;
+      }
+    }
+
+    // Upload thumbnail version if provided
+    if (thumb) {
+      onProgress?.('uploadingThumb', 0);
+      const thumbPath = `posts/${userId}/${timestamp}-thumb_${baseName}.jpg`;
+      const thumbResult = await networkUploader.uploadFile(
+        thumb,
+        thumbPath,
+        {
+          timeout: 120000,
+          onProgress: (progress) => onProgress?.('uploadingThumb', progress)
+        },
+        { contentType: 'image/jpeg' }
+      );
+
+      if (thumbResult.success) {
+        urls.thumb = thumbResult.url!;
+      }
+    }
+
+    console.log('✅ Multi-version post media upload successful:', urls);
+    return urls;
+  } catch (error) {
+    console.error('❌ Error uploading post media versions:', error);
+    throw error;
+  }
+};
+
 export const uploadPostMedia = async (file: File, userId: string): Promise<string> => {
   try {
     console.log('📤 Starting network-aware post media upload:', { userId, fileSize: file.size, fileType: file.type });
@@ -210,6 +299,70 @@ export const uploadReelMedia = async (file: File, userId: string): Promise<strin
 // Upload-first pattern functions
 export const generateFirestoreId = (collectionName: string): string => {
   return doc(collection(db, collectionName)).id;
+};
+
+/**
+ * Create complete post with optimized media versions
+ * Instagram-style with original, feed, and thumbnail URLs
+ */
+export const createCompletePostWithVersions = async (
+  userId: string,
+  caption: string,
+  mediaVersions: { original: File; feed?: File; thumb?: File },
+  mediaType: 'image' | 'video',
+  settings: { allowComments: boolean; hideLikeCount: boolean } = { allowComments: true, hideLikeCount: false },
+  onProgress?: (stage: string, progress: number) => void
+): Promise<string> => {
+  console.log('🚀 Starting createCompletePostWithVersions:', { 
+    userId, 
+    caption, 
+    mediaType, 
+    originalSize: mediaVersions.original.size,
+    hasOptimizedVersions: !!(mediaVersions.feed || mediaVersions.thumb),
+    settings 
+  });
+  
+  try {
+    // Upload all media versions
+    const urls = await uploadPostMediaVersions(
+      userId,
+      mediaVersions.original,
+      mediaVersions.feed,
+      mediaVersions.thumb,
+      onProgress
+    );
+
+    // Create complete post document with all URLs
+    onProgress?.('savingMetadata', 0);
+    console.log('📄 Creating Firestore document with media versions...');
+    const postsRef = collection(db, 'posts');
+    const docRef = await addDoc(postsRef, {
+      userId,
+      caption,
+      mediaURL: urls.original,
+      feedURL: urls.feed || urls.original,
+      thumbURL: urls.thumb || urls.feed || urls.original,
+      mediaType,
+      timestamp: serverTimestamp(),
+      likes: 0,
+      likedBy: [],
+      allowComments: settings.allowComments,
+      hideLikeCount: settings.hideLikeCount
+    });
+    
+    onProgress?.('savingMetadata', 100);
+    console.log('🎉 Post created successfully with ID:', docRef.id);
+    return docRef.id;
+  } catch (error) {
+    console.error('❌ Error in createCompletePostWithVersions:', error);
+    
+    if (error?.code) {
+      console.error('🔴 Firebase error code:', error.code);
+      console.error('🔴 Firebase error message:', error.message);
+    }
+    
+    throw error;
+  }
 };
 
 export const createCompletePost = async (

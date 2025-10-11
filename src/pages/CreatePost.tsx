@@ -1,11 +1,9 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { createCompletePostWithVersions } from '../services/mediaService';
 import { shareMediaToChats } from '../services/chat/shareService';
 import { useToast } from '@/hooks/use-toast';
 import { logger } from '../utils/logger';
-import { optimizeImage, optimizeVideo } from '../utils/mediaOptimization';
 import CameraInterface from '../components/camera/CameraInterface';
 import MediaPreview from '../components/camera/MediaPreview';
 import ShareToFollowers from '../components/camera/ShareToFollowers';
@@ -111,6 +109,15 @@ const CreatePost = () => {
   const handlePost = async (caption: string) => {
     if (!selectedMedia || !currentUser) return;
     
+    if (!currentUser.uid) {
+      toast({
+        title: "Authentication Error",
+        description: "Please log out and log back in",
+        variant: "destructive"
+      });
+      return;
+    }
+    
     setLoading(true);
     setShowProgress(true);
     
@@ -124,34 +131,29 @@ const CreatePost = () => {
     });
     
     try {
-      // Optimize media first
-      logger.info('📸 Optimizing media before upload...');
-      setUploadStages(prev => ({ ...prev, optimizing: 10 }));
-      
-      let optimized;
-      if (selectedMedia.type === 'image') {
-        optimized = await optimizeImage(selectedMedia.file);
-      } else {
-        optimized = await optimizeVideo(selectedMedia.file);
-      }
-      
-      setUploadStages(prev => ({ ...prev, optimizing: 100 }));
-      logger.info('✅ Media optimization complete');
+      logger.info('🚀 Starting direct upload:', {
+        userId: currentUser.uid,
+        fileName: selectedMedia.file.name,
+        fileSize: selectedMedia.file.size,
+        mediaType: selectedMedia.type
+      });
       
       // Progress callback for uploads
-      const onProgress = (stage: string, progress: number) => {
+      const onProgress = (progress: number) => {
         setUploadStages(prev => ({
           ...prev,
-          [stage]: progress
+          uploadingOriginal: progress
         }));
       };
       
       if (selectedMedia.type === 'image') {
-        // Upload with all optimized versions
-        await createCompletePostWithVersions(
+        // Direct upload without optimization
+        const { createCompletePost } = await import('../services/mediaService');
+        
+        await createCompletePost(
           currentUser.uid, 
           caption, 
-          optimized,
+          selectedMedia.file,
           selectedMedia.type,
           (selectedMedia as any).settings || { allowComments: true, hideLikeCount: false },
           onProgress
@@ -183,11 +185,22 @@ const CreatePost = () => {
       
       // Navigate back to home
       navigate('/');
-    } catch (error) {
-      logger.error('Error posting content:', error);
+    } catch (error: any) {
+      logger.error('❌ Upload failed:', error);
+      
+      let errorMessage = "Failed to upload. Please try again.";
+      
+      if (error?.code === 'storage/unauthorized') {
+        errorMessage = "Storage access denied. Check permissions.";
+      } else if (error?.code === 'storage/unauthenticated') {
+        errorMessage = "Please log out and log back in.";
+      } else if (error?.message) {
+        errorMessage = error.message;
+      }
+      
       toast({
-        title: "Error",
-        description: "Failed to share content. Please try again.",
+        title: "Upload Error",
+        description: errorMessage,
         variant: "destructive"
       });
     } finally {

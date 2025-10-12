@@ -387,6 +387,13 @@ export const createCompletePost = async (
     // Generate unique filename
     const uniqueFileName = `${Date.now()}-${file.name}`;
     const storagePath = `posts/${userId}/${uniqueFileName}`;
+
+    // Validate path format matches rules
+    if (!storagePath.match(/^posts\/[^\/]+\/[^\/]+$/)) {
+      throw new Error(`Invalid storage path format: ${storagePath}`);
+    }
+
+    console.log('✅ Upload path validated:', storagePath);
     
     // Upload media first using network-aware uploader
     console.log('📤 Starting network-aware media upload...');

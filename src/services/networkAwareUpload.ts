@@ -70,8 +70,34 @@ export class NetworkAwareUploader {
         connectionType: connection?.effectiveType || 'unknown'
       });
 
+      // Verify user is authenticated before upload
+      const { auth } = await import('../config/firebase');
+      const currentUser = auth.currentUser;
+
+      if (!currentUser) {
+        throw new Error('User must be authenticated to upload');
+      }
+
+      console.log('🔐 Authenticated user uploading:', {
+        uid: currentUser.uid,
+        email: currentUser.email,
+        pathUserId: storagePath.split('/')[1]
+      });
+
+      // Verify UID matches path
+      const pathUserId = storagePath.split('/')[1];
+      if (currentUser.uid !== pathUserId) {
+        throw new Error(`UID mismatch: ${currentUser.uid} vs path ${pathUserId}`);
+      }
+
       // Create storage reference
       const storageRef = ref(storage, storagePath);
+      
+      console.log('📂 Storage Reference:', {
+        fullPath: storageRef.fullPath,
+        bucket: storageRef.bucket,
+        name: storageRef.name
+      });
 
       // Set up timeout race
       const uploadPromise = this.performUpload(storageRef, file, options, controller.signal, metadata);
@@ -145,15 +171,27 @@ export class NetworkAwareUploader {
     let lastTick = Date.now();
     let cancelledByWatchdog = false;
     const connection = (navigator as any).connection;
-    const stallThreshold = (connection?.effectiveType === 'slow-2g' || connection?.effectiveType === '2g') ? 30000 : 20000; // 30s on very slow, else 20s
+    const stallThreshold = (connection?.effectiveType === 'slow-2g' || connection?.effectiveType === '2g') ? 45000 : 30000; // Increased from 20s to 30s
+    const uploadStartTime = Date.now();
+
     const stallTimer = window.setInterval(() => {
       const bytes = uploadTask.snapshot?.bytesTransferred ?? 0;
+      const elapsed = Date.now() - uploadStartTime;
+      
+      // More lenient in first 60 seconds (connection negotiation time)
+      const currentThreshold = elapsed < 60000 ? stallThreshold * 2 : stallThreshold;
+      
       if (bytes > lastBytes) {
         lastBytes = bytes;
         lastTick = Date.now();
         return;
       }
-      if (Date.now() - lastTick > stallThreshold) {
+      if (Date.now() - lastTick > currentThreshold) {
+        console.error('❌ Upload stalled:', {
+          bytesTransferred: bytes,
+          secondsSinceLastProgress: Math.round((Date.now() - lastTick) / 1000),
+          totalElapsed: Math.round(elapsed / 1000)
+        });
         cancelledByWatchdog = true;
         try { uploadTask.cancel(); } catch {}
       }
@@ -172,8 +210,17 @@ export class NetworkAwareUploader {
         },
         (error) => {
           window.clearInterval(stallTimer);
+          console.error('❌ Upload task error:', {
+            code: error?.code,
+            message: error?.message,
+            serverResponse: error?.serverResponse,
+            bytesTransferred: uploadTask.snapshot?.bytesTransferred,
+            totalBytes: uploadTask.snapshot?.totalBytes,
+            cancelledByWatchdog
+          });
+          
           if (cancelledByWatchdog && error?.code === 'storage/canceled') {
-            return reject(new Error('Upload stalled (no progress). This is often caused by blocked requests (App Check or Storage rules).'));
+            return reject(new Error('Upload stalled (no progress). Check: 1) Auth token is valid, 2) Storage rules allow this path, 3) Network connection is stable.'));
           }
           reject(error);
         },

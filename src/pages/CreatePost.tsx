@@ -29,6 +29,18 @@ const CreatePost = () => {
   const { currentUser } = useAuth();
   const { toast } = useToast();
 
+  // Monitor auth state for debugging
+  React.useEffect(() => {
+    if (!currentUser) {
+      console.warn('⚠️ No authenticated user in CreatePost');
+    } else {
+      console.log('✅ CreatePost mounted with user:', {
+        uid: currentUser.uid,
+        email: currentUser.email
+      });
+    }
+  }, [currentUser]);
+
   const handleMediaCaptured = (media: {type: 'image' | 'video', data: string, file: File}) => {
     setSelectedMedia(media);
     setViewMode('preview');
@@ -117,6 +129,32 @@ const CreatePost = () => {
       });
       return;
     }
+
+    if (!selectedMedia.file || selectedMedia.file.size === 0) {
+      toast({
+        title: "Invalid File",
+        description: "The selected file cannot be read",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    // Validate and refresh auth token
+    try {
+      const token = await currentUser.getIdToken(true); // Force refresh
+      if (!token) {
+        throw new Error('Failed to get auth token');
+      }
+      console.log('✅ Auth token refreshed for upload');
+    } catch (tokenError) {
+      console.error('❌ Auth token error:', tokenError);
+      toast({
+        title: "Authentication Error",
+        description: "Please log out and log back in",
+        variant: "destructive"
+      });
+      return;
+    }
     
     setLoading(true);
     setShowProgress(true);
@@ -186,26 +224,49 @@ const CreatePost = () => {
       // Navigate back to home
       navigate('/');
     } catch (error: any) {
-      logger.error('❌ Upload failed:', error);
+      console.error('❌ UPLOAD FAILED - Full error details:', {
+        message: error?.message,
+        code: error?.code,
+        name: error?.name,
+        stack: error?.stack
+      });
       
       let errorMessage = "Failed to upload. Please try again.";
-      
+      let errorTitle = "Upload Error";
+
+      // Specific error messages
       if (error?.code === 'storage/unauthorized') {
-        errorMessage = "Storage access denied. Check permissions.";
+        errorTitle = "Permission Denied";
+        errorMessage = "Storage access denied. Check Firebase Storage rules.";
       } else if (error?.code === 'storage/unauthenticated') {
+        errorTitle = "Not Authenticated";
         errorMessage = "Please log out and log back in.";
+      } else if (error?.message?.includes('optimization')) {
+        errorTitle = "Processing Error";
+        errorMessage = "Failed to process media. Try a different file.";
+      } else if (error?.message?.includes('network')) {
+        errorTitle = "Network Error";
+        errorMessage = "Check your internet connection and try again.";
+      } else if (error?.message?.includes('stalled')) {
+        errorTitle = "Upload Stalled";
+        errorMessage = "Upload stopped making progress. Check auth token and storage rules.";
       } else if (error?.message) {
         errorMessage = error.message;
       }
-      
+
       toast({
-        title: "Upload Error",
+        title: errorTitle,
         description: errorMessage,
-        variant: "destructive"
+        variant: "destructive",
+        duration: 5000
       });
+
+      // Keep progress dialog open on error so user can see what failed
+      setTimeout(() => {
+        setShowProgress(false);
+      }, 3000);
     } finally {
       setLoading(false);
-      setShowProgress(false);
     }
   };
 

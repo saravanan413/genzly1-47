@@ -145,7 +145,7 @@ const CreatePost = () => {
       if (!token) {
         throw new Error('Failed to get auth token');
       }
-      console.log('✅ Auth token refreshed for upload');
+      console.log('✅ Auth token refreshed, userId:', currentUser.uid);
     } catch (tokenError) {
       console.error('❌ Auth token error:', tokenError);
       toast({

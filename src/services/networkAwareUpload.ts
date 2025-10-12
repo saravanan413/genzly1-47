@@ -90,8 +90,25 @@ export class NetworkAwareUploader {
         throw new Error(`UID mismatch: ${currentUser.uid} vs path ${pathUserId}`);
       }
 
+      // Force token refresh explicitly before upload
+      await currentUser.getIdToken(true);
+      console.log('✅ Auth token refreshed, userId:', currentUser.uid);
+
+      // Strict path validation for posts uploads
+      if (storagePath.startsWith('posts/')) {
+        const pathMatch = storagePath.match(/^posts\/([^/]+)\/([^/]+)$/);
+        if (!pathMatch) {
+          throw new Error(`Invalid storage path format: ${storagePath}`);
+        }
+        const pathUserIdStrict = pathMatch[1];
+        if (currentUser.uid !== pathUserIdStrict) {
+          throw new Error(`UID mismatch in path: ${currentUser.uid} vs ${pathUserIdStrict}`);
+        }
+      }
+
       // Create storage reference
       const storageRef = ref(storage, storagePath);
+      console.log('Uploading to:', storageRef.fullPath);
       
       console.log('📂 Storage Reference:', {
         fullPath: storageRef.fullPath,

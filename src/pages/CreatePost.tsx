@@ -121,45 +121,10 @@ const CreatePost = () => {
   const handlePost = async (caption: string) => {
     if (!selectedMedia || !currentUser) return;
     
-    if (!currentUser.uid) {
-      toast({
-        title: "Authentication Error",
-        description: "Please log out and log back in",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    if (!selectedMedia.file || selectedMedia.file.size === 0) {
-      toast({
-        title: "Invalid File",
-        description: "The selected file cannot be read",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    // Validate and refresh auth token
-    try {
-      const token = await currentUser.getIdToken(true); // Force refresh
-      if (!token) {
-        throw new Error('Failed to get auth token');
-      }
-      console.log('✅ Auth token refreshed, userId:', currentUser.uid);
-    } catch (tokenError) {
-      console.error('❌ Auth token error:', tokenError);
-      toast({
-        title: "Authentication Error",
-        description: "Please log out and log back in",
-        variant: "destructive"
-      });
-      return;
-    }
-    
     setLoading(true);
     setShowProgress(true);
     
-    // Reset stages
+    // Reset upload progress
     setUploadStages({
       optimizing: 0,
       uploadingOriginal: 0,
@@ -169,14 +134,7 @@ const CreatePost = () => {
     });
     
     try {
-      logger.info('🚀 Starting direct upload:', {
-        userId: currentUser.uid,
-        fileName: selectedMedia.file.name,
-        fileSize: selectedMedia.file.size,
-        mediaType: selectedMedia.type
-      });
-      
-      // Progress callback for uploads
+      // Progress callback for Instagram-style upload
       const onProgress = (progress: number) => {
         setUploadStages(prev => ({
           ...prev,
@@ -185,14 +143,12 @@ const CreatePost = () => {
       };
       
       if (selectedMedia.type === 'image') {
-        // Direct upload without optimization
-        const { createCompletePost } = await import('../services/mediaService');
+        // Instagram-style photo upload
+        const { createInstagramPost } = await import('../services/instagramUpload');
         
-        await createCompletePost(
-          currentUser.uid, 
-          caption, 
-          selectedMedia.file,
-          selectedMedia.type,
+        await createInstagramPost(
+          selectedMedia.file, 
+          caption,
           (selectedMedia as any).settings || { allowComments: true, hideLikeCount: false },
           onProgress
         );
@@ -202,14 +158,14 @@ const CreatePost = () => {
           description: "Post shared successfully!"
         });
       } else {
-        // For videos, create complete reel
-        const { createCompleteReel } = await import('../services/reelService');
+        // Instagram-style video upload (reel)
+        const { createInstagramReel } = await import('../services/instagramUpload');
         
-        await createCompleteReel(
-          currentUser.uid, 
-          caption, 
-          selectedMedia.file,
-          (selectedMedia as any).settings || { allowComments: true, hideLikeCount: false }
+        await createInstagramReel(
+          selectedMedia.file, 
+          caption,
+          (selectedMedia as any).settings || { allowComments: true, hideLikeCount: false },
+          onProgress
         );
         
         toast({
@@ -224,32 +180,20 @@ const CreatePost = () => {
       // Navigate back to home
       navigate('/');
     } catch (error: any) {
-      console.error('❌ UPLOAD FAILED - Full error details:', {
-        message: error?.message,
-        code: error?.code,
-        name: error?.name,
-        stack: error?.stack
-      });
+      console.error('❌ Upload failed:', error);
       
       let errorMessage = "Failed to upload. Please try again.";
       let errorTitle = "Upload Error";
 
-      // Specific error messages
       if (error?.code === 'storage/unauthorized') {
         errorTitle = "Permission Denied";
-        errorMessage = "Storage access denied. Check Firebase Storage rules.";
+        errorMessage = "Storage access denied. Check your Storage rules.";
       } else if (error?.code === 'storage/unauthenticated') {
         errorTitle = "Not Authenticated";
-        errorMessage = "Please log out and log back in.";
-      } else if (error?.message?.includes('optimization')) {
-        errorTitle = "Processing Error";
-        errorMessage = "Failed to process media. Try a different file.";
+        errorMessage = "Please log in again.";
       } else if (error?.message?.includes('network')) {
         errorTitle = "Network Error";
-        errorMessage = "Check your internet connection and try again.";
-      } else if (error?.message?.includes('stalled')) {
-        errorTitle = "Upload Stalled";
-        errorMessage = "Upload stopped making progress. Check auth token and storage rules.";
+        errorMessage = "Check your internet connection.";
       } else if (error?.message) {
         errorMessage = error.message;
       }
@@ -261,7 +205,6 @@ const CreatePost = () => {
         duration: 5000
       });
 
-      // Keep progress dialog open on error so user can see what failed
       setTimeout(() => {
         setShowProgress(false);
       }, 3000);
